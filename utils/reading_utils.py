@@ -64,7 +64,7 @@ def read_group(group,session):
     """
     experiment = session.subExperiment.experiment
     probe = experiment.probe
-    id = probe.id.astype('int') #Reading the channel id file from the parameters dictionary
+    id = probe.id #Reading the channel id file from the parameters dictionary
     #If not exists, create a folder where the analysis files for the entire experiment would be stored for klusta purposes
     if not os.path.exists(session.subExperiment.dir + '/analysis_files'):
         os.mkdir(session.subExperiment.dir + '/analysis_files')
@@ -77,15 +77,15 @@ def read_group(group,session):
         #Read the first electrode in the tetrode or shank to have a definite length for the group file array
         if experiment.fileformat == 'dat':
             #For the "channel per file" option of Intan
-            if id[0,group] < 10:
+            if id[group][0] < 10:
                 prefix = '00'
             else:
                 prefix = '0'
-            electrode0_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' +prefix + str(id[0,group]) + '.dat'
+            electrode0_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' +prefix + str(int(id[group][0])) + '.dat'
             electrode0 = read_amplifier_dat_file(electrode0_path)
         else:
             #For the OpenEphys files
-            electrode0_path = session.dir+ '/100_CH' + str(id[0,s] + 1) + '.continuous'
+            electrode0_path = session.dir+ '/100_CH' + str(int(id[group][0]) + 1) + '.continuous'
             electrode0_dict = OpenEphys.load(electrode0_path)
             electrode0 = electrode0_dict['data']
 
@@ -96,15 +96,15 @@ def read_group(group,session):
         for trode in range(1,probe.nr_of_electrodes_per_group):
             if experiment.fileformat == 'dat':
                 #For the "channel per file" option of Intan
-                if id[trode,group] < 10:
+                if id[group][trode] < 10:
                     prefix = '00'
                 else:
                     prefix = '0'
-                electrode_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' + prefix +str(id[trode,group]) + '.dat'
+                electrode_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' + prefix +str(int(id[group][trode])) + '.dat'
                 group_file[trode] = read_amplifier_dat_file(electrode_path)
             else:
                 #For the OpenEphys files
-                electrode_path = session.dir + '/100_CH' + str(id[trode,group] + 1) + '.continuous'
+                electrode_path = session.dir + '/100_CH' + str(int(id[group][trode]) + 1) + '.continuous'
                 electrode_dict = OpenEphys.load(electrode_path)
                 group_file[trode] = electrode_dict['data']
 
