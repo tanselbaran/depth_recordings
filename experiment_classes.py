@@ -73,6 +73,7 @@ class acute(Experiment):
 
     def __init__(self, experiment_dir):
         self.dir = experiment_dir
+        self.name = self.dir.split('/')[-1]
         self.locations = {}
 
     def add_location(self, location_dir):
@@ -112,10 +113,10 @@ class subExperiment:
             self.add_session(session_name, order)
             current_session = current_session + 1
 
-
 class chronic(Experiment):
     def __init__(self, experiment_dir):
         self.dir = experiment_dir
+        self.name = self.dir.split('/')[-1]
         self.days = {}
 
     def add_day(self, day_dir):
