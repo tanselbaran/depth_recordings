@@ -9,169 +9,96 @@ from LFPutils.read_evoked_lfp import *
 import pickle as p
 from ipywidgets import interact, IntText, fixed, FloatSlider
 from IPython.display import display
+import nbformat as nbf
 
 
-###Utilities for pre-processing data (reading , filtering , thresholding)
+def initialize_spike_sorting_notebook_for_group(location, group):
+    nb = nbf.v4.new_notebook()
+    experiment = location.experiment
 
-def initialize_global_params(filter_type = 'bandpass', high_cutoff = 3000., low_cutoff = 300., sample_rate = 30000., pre = 0.8, post = 1.2, threshold_coeff = 5, artefact_limit = 20, cut_beginning = 1, cut_end = 1, evoked_pre = 0.05, evoked_post = 0.2, colors = ['xkcd:purple', 'xkcd:green', 'xkcd:pink', 'xkcd:brown', 'xkcd:red', 'xkcd:yellow', 'xkcd:bright green', 'xkcd:cyan', 'xkcd:black', 'xkcd:light orange'], spike_sorting = True, mode = 'Continuous'):
-    spike_timerange = np.arange(-pre, post, (1000.0/sample_rate))
+    header = """# Notebook for analyzing location: {:s},  group: {:g} in experiment: {:s}
+            """.format(location.name, group, experiment.dir)
 
-    global_params = {
-        'sample_rate': sample_rate,
-        'pre': pre,
-        'post': post,
-        'spike_timerange': spike_timerange,
-        'filtertype': filter_type,
-        'high_cutoff': high_cutoff,
-        'low_cutoff': low_cutoff,
-        'threshold_coeff': threshold_coeff,
-        'artefact_limit': artefact_limit,
-        'colors': colors,
-        'spike_sorting': spike_sorting,
-        'cut_beginning': cut_beginning,
-        'cut_end': cut_end,
-        'evoked_pre': evoked_pre,
-        'evoked_post': evoked_post,
-    }
+    import_header = """## Importing necessary packages and initializing objects"""
+    import_code = """from spikeSortingUtils.custom_spike_sorting_utils import *
+    import numpy as np
+    import os
+    import pickle as p
+    from surfaceRecUtils.surface_rec_notebook_utils import *
+    from surfaceRecUtils.simple_clustering_utils import *
+    import h5py
 
-    bandfilt = bandpassFilter(rate = sample_rate, high = high_cutoff, low = low_cutoff, order = 4)
-    global_params['bandfilt'] = bandfilt
+    %matplotlib notebook
 
-    return global_params
+    experiment_main_folder = {:s}
+    experiment = p.load(open(experiment_main_folder + '/experiment_params.p'), 'rb')
+    location = experiment.locations[{:g}]
+    analysis_files_folder = location.dir+'/analysis_files/group_{:g}/'
+    """.format(experiment.dir, location_index, group)
 
+    read_location_header = """## Reading the data and extracting waveforms from this location"""
+    read_location_code = """location_output = read_location(location, {:g})
+    clusters, projection = PCA_and_cluster(location_output['waveforms'], location)
+    save_clusters_to_pickle(clusters, projection, location_output['peak_times'], (analysis_files_folder+'cluster_info.p'))
+    display_widget(location_output['waveforms'], plot_params, location, ['clusters', 'ind_on'], clusters)""".format(group)
 
-def read_location(dirs, channels, global_params):
+    good_reclustering_header = """## Reclustering the selected waveforms"""
+    good_reclustering_code = """good_cluster_indices = []
+    (good_clusters, good_waveforms, good_peaktimes, good_projection) = recluster(waveforms, location, peak_times, clusters, good_cluster_indices)
+    save_reclusters_to_pickle(good_clusters, good_projection, good_peaktimes, (analysis_files_folder+'good_cluster_info.p'))
+    display_widget(good_waveforms, plot_params, location, ['clusters', 'ind_on'], good_clusters)"""
 
-    end_times = np.zeros(len(dirs))
-    end_inds = np.zeros(len(dirs))
-    data = np.zeros((len(channels), 0))
-    waveforms = np.zeros((0,len(channels),60))
-    peak_times = np.zeros(0)
-    stim = np.zeros(0)
-    current_end_time = 0
-    time = np.zeros(0)
+    better_reclustering_header = """## Reclustering selected waveforms again"""
+    better_reclustering_code = """better_cluster_indices = []
+    (better_clusters, better_waveforms, better_peaktimes, better_projection) = recluster(good_waveforms, location, good_peaktimes, good_clusters, better_cluster_indices)
+    del good_waveforms
+    save_reclusters_to_pickle(better_clusters, better_projection, better_peaktimes, (analysis_files_folder+'better_cluster_info.p'))
+    display_widget(better_waveforms, plot_params, location, ['clusters', 'ind_on'], better_clusters)"""
 
-    for rec in tqdm(range(len(dirs))):
-        mainfolder = dirs[rec]
-        params = {}
+    sorting_header = """## Sorting into units"""
+    sorting_code = """noise = []
+    multi_unit = []
+    units = {
+        0:[],
+        1:[],}
+        unit_indices = get_unit_indices(units, better_clusters)
+        spike_times, spike_trains = get_unit_spike_times_and_trains(unit_indices, better_peaktimes, location)
+        """
 
-        for key in global_params:
-            params[key] = global_params[key]
+    psth_header = """## Generating PSTHs for sessions based on provided stim preferences"""
+    psth_code = """generate_psths(location, spike_times)"""
 
-        params['mainfolder'] = mainfolder
-        params['rhd_path'] = mainfolder + 'info.rhd'
-        params['time_path'] = mainfolder + 'time.dat'
-        params['header'] = read_data(params['rhd_path'])
-        params['time'] = read_time_dat_file(params['time_path'], global_params['sample_rate'])
-        params['channels'] = channels
-        params['stim_path'] = mainfolder + 'board-DIN-01.dat'
-        params['stim'] = read_amplifier_dat_file(params['stim_path'])
+    saving_header = """## Saving the spike trains, waveforms and PSTHs in hdf file"""
+    saving_code = """f = h5py.File(experiment_main_folder + '/analysis_results.hdf5', 'a')
+    ch_grp = f[location.name + '/group_{:g}']
+    spike_grp = ch_grp.create_group('spike_results')
+    spike_grp.create_dataset("spike_trains", spike_trains)
+    spike_grp.create_dataset("spike_times", spike_times)
+    spike_grp.create_dataset("unit_indices", unit_indices)
+    spike_grp.create_dataset("waveforms", better_waveforms)
+    if whisker_stim_psth in locals():
+        spike_grp.create_dataset("whisker_stim_psth",whisker_stim_psth)
+    if optical_stim_psth in locals():
+        spike_grp.create_dataset("optical_stim_psth", optical_stim_psth)
+    """.format(group, )
 
-        end_times[rec] = params['time'][-1]
-        if rec == 0:
-            time = np.append(time, params['time'])
-        else:
-            time = np.append(time, params['time'] + end_times[rec-1])
+    nb['cells'] = [nbf.v4.new_markdown_cell(header),
+                        nbf.v4.new_markdown_cell(import_header),
+                        nbf.v4.new_code_cell(import_code),
+                        nbf.v4.new_markdown_cell(read_location_header),
+                        nbf.v4.new_code_cell(read_location_code),
+                        nbf.v4.new_markdown_cell(good_reclustering_header),
+                        nbf.v4.new_code_cell(good_reclustering_code),
+                        nbf.v4.new_markdown_cell(better_reclustering_header),
+                        nbf.v4.new_code_cell(better_reclustering_code),
+                        nbf.v4.new_markdown_cell(sorting_header),
+                        nbf.v4.new_code_cell(sorting_code),
+                        nbf.v4.new_markdown_cell(psth_header),
+                        nbf.v4.new_code_cell(psth_code),
+                        nbf.v4.new_markdown_cell(saving_header),
+                        nbf.v4.new_code_cell(saving_code)]
 
-        data_electrode = np.zeros((len(params['channels']), len(params['time'])))
-        waveforms_session = np.zeros((0, len(channels), 60))
-        peak_times_session = np.zeros(0)
-
-        for trode in range(len(params['channels'])):
-            if params['channels'][trode] < 10:
-                filepath = params['mainfolder'] + 'amp-A-00' + str(params['channels'][trode]) + '.dat'
-            else:
-                filepath = params['mainfolder'] + 'amp-A-0' + str(params['channels'][trode])  + '.dat'
-            data_electrode[trode] = read_amplifier_dat_file(filepath)
-
-        if global_params['spike_sorting'] == True:
-            bandfilt = global_params['bandfilt']
-            filtered_data_electrode = bandfilt(data_electrode)
-            (waveforms_trode, peak_times_trode) = extract_waveforms(filtered_data_electrode, params)
-            waveforms_session = np.append(waveforms_session, waveforms_trode, 0)
-            peak_times_session = np.append(peak_times_session, peak_times_trode + current_end_time)
-
-        data = np.append(data, data_electrode, 1)
-        stim = np.append(stim, params['stim'])
-        waveforms = np.append(waveforms, waveforms_session, 0)
-        peak_times = np.append(peak_times, peak_times_session,0)
-        current_end_time = current_end_time + params['time'][-1]
-        end_inds[rec] = np.sum((end_times*global_params['sample_rate'])[0:rec+1]) + rec
-    end_inds = np.insert(end_inds,0,0)
-
-    if global_params['spike_sorting'] == True:
-        location_output = {'waveforms': waveforms, 'data':data, 'peak_times':peak_times, 'stim':stim, 'time':time, 'end_inds':end_inds}
-    else:
-        location_output = {'data':data, 'stim':stim, 'time':time, 'end_inds':end_inds}
-
-    return location_output
-
-def extract_waveforms(data, params):
-	"""
-	This function extracts waveforms from multiple channel data based on the
-	given threshold coefficient. A relative threshold is calculated by
-	multiplying the rms of the recording with the given threshold coefficient.
-	For each time step the function scans through all the electrodes to find an
-	event of threshold crossing. If so, the waveforms in all channels surrounding
-	that time step are recorded.
-
-	Inputs:
-		data: Numpy array containing the bandpass filtered data in the form of
-			(N_electrodes x N_time steps)
-		params: Dictionary containing the recording parameters. The following
-			entries must be present:
-
-			sample_rate: Sampling rate in Hz
-			time: Time array of the recording (numpy array)
-			pre: Extent of the spike time window prior to peak (in ms)
-			post: Extent of the spike time window post the peak (in ms)
-			flat_map_array: Flattened numpy array containing the spatial
-				information of the electrodes (contains only one element
-				for single channel recordings)
-			threshold_coeff: Coefficient used for calculating the threshold
-				value per channel
-
-	Outputs:
-		waveforms: Numpy array containing the extracted waveforms from all
-			channels (N_events x N_electrodes x N_timesteps_in_spike_time_range)
-		peak_times: numpy array containing the times of the events (in s)
-			(1xN_events)
-	"""
-
-	noise = np.sqrt(np.mean(np.square(data), 1))
-	threshold = (-1) * noise * params['threshold_coeff']
-
-	waveforms = []
-	peak_times = []
-	found = False
-	for i in tqdm(range(len(params['time'])-40)):
-		for trode in range(len(params['channels'])):
-			if (data[trode,i] < threshold[trode]) and (abs(data[trode,i]) > abs(data[trode,i-1])) and (abs(data[trode,i]) > abs(data[trode,i+1])):
-				found = True
-				break
-		if found and (i > len(params['spike_timerange'])):
-			waveform = np.zeros((len(params['channels']), len(params['spike_timerange'])))
-			for trode in range(len(params['channels'])):
-				waveform[trode,:] = data[trode, (i-int(params['pre']*params['sample_rate']/1000)):(i+int(params['post']*params['sample_rate']/1000))]
-			waveforms.append(waveform)
-			peak_times.append(params['time'][i])
-			found = False
-
-	waveforms = np.asarray(waveforms)
-	peak_times = np.asarray(peak_times)
-	return waveforms, peak_times
-
-
-def surface_evoked_LFP(location_output, begin, end, global_params, mode):
-    if mode == 'evoked':
-        stim_timestamps = extract_stim_timestamps_der(location_output['stim'])
-    if mode == 'spont':
-        stim_timestamps = np.arange(begin, end, global_params['sample_rate'])
-    lowfilt = lowpassFilter(rate = global_params['sample_rate'], high = 300, order = 4)
-    filtered_data = lowfilt(location_output['data'])
-    evoked = read_evoked_lfp_from_stim_timestamps(filtered_data, begin, end, stim_timestamps, global_params)
-    return evoked
-
+    nbf.write(nb, 'test.ipynb')
 
 ### Utilities for processing the units
 
@@ -320,7 +247,7 @@ def display_widget(waveforms, plot_params, global_params, mode, *args):
 
 ### Utilities for long-term storage and retrieval of the analysis results
 
-def save_clusters_to_pickle(clusters, projection, filepath):
+def save_clusters_to_pickle(clusters, projection, peak_times, filepath):
 	p.dump({'clusters': clusters, 'projection': projection}, open(filepath, 'wb'))
 
 def save_reclusters_to_pickle(clusters, waveforms, projection, peak_times, filepath):
