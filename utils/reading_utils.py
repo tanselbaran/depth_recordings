@@ -12,6 +12,7 @@ from utils.load_intan_rhd_format import *
 import os
 import utils.OpenEphys
 import pickle
+from scipy import signal
 
 def read_amplifier_dat_file(filepath):
     """
@@ -82,7 +83,8 @@ def read_group(group,session):
             else:
                 prefix = '0'
             electrode0_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' +prefix + str(int(id[group][0])) + '.dat'
-            electrode0 = read_amplifier_dat_file(electrode0_path)
+            electrode0_signal = read_amplifier_dat_file(electrode0_path)
+            electrode0 = signal.decimate(electrode0_signal, 30)
         else:
             #For the OpenEphys files
             electrode0_path = session.dir+ '/100_CH' + str(int(id[group][0]) + 1) + '.continuous'
@@ -91,9 +93,9 @@ def read_group(group,session):
 
         #Reading the rest of the electrodes in the tetrode or the shank
 
-        group_file = np.zeros((probe.nr_of_electrodes_per_group, len(electrode0))) #Create  the array of the group file
+        group_file = np.zeros((len(probe.id[group]), len(electrode0))) #Create  the array of the group file
         group_file[0] = electrode0
-        for trode in range(1,probe.nr_of_electrodes_per_group):
+        for trode in range(1,len(probe.id[group])):
             if experiment.fileformat == 'dat':
                 #For the "channel per file" option of Intan
                 if id[group][trode] < 10:
@@ -101,7 +103,8 @@ def read_group(group,session):
                 else:
                     prefix = '0'
                 electrode_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' + prefix +str(int(id[group][trode])) + '.dat'
-                group_file[trode] = read_amplifier_dat_file(electrode_path)
+                trode_signal = read_amplifier_dat_file(electrode_path)
+                group_file[trode] = signal.decimate(trode_signal, 30)
             else:
                 #For the OpenEphys files
                 electrode_path = session.dir + '/100_CH' + str(int(id[group][trode]) + 1) + '.continuous'
@@ -114,13 +117,14 @@ def read_group(group,session):
         for sample in range(len(session.rhd_files)):
             data = read_data(session.dir+'/'+ p['rhd_file'][sample])
             electrode_inds = []
-            for trode in range(probe.nr_of_electrodes_per_group):
+            for trode in range(len(probe.id[group])):
                 electrode_inds = np.append(electrode_inds, id[trode,group])
             electrode_inds = electrode_inds.astype(int)
             group_file = np.append(group_file, data['amplifier_data'][electrode_inds], 0)
 
     #Writing the data into the .dat file if spike sorting will be performed.
-    if session.subExperiment.preferences['do_spike_analysis'] == 'y':
+    #if session.subExperiment.preferences['do_spike_analysis'] == 'y':
+    if False:
         if session.order == 0:
             fid_write = open(session.subExperiment.dir +'/analysis_files/group_{:g}/group_{:g}.dat'.format(group, group), 'w')
         else:
