@@ -27,7 +27,7 @@ def extract_stim_timestamps_der(stim, experiment):
 
     return stim_timestamps
 
-def read_evoked_lfp_from_stim_timestamps(filtered_data, stim_timestamps,  experiment, mode):
+def read_evoked_lfp_from_stim_timestamps(filtered_data, stim_timestamps, fake_stim, experiment, mode, subsession_end_inds):
     if mode == 'whisker':
         evoked_pre = experiment.whisker_evoked_pre
         evoked_post = experiment.whisker_evoked_post
@@ -35,10 +35,18 @@ def read_evoked_lfp_from_stim_timestamps(filtered_data, stim_timestamps,  experi
         evoked_pre = experiment.light_evoked_pre
         evoked_post = experiment.light_evoked_post
 
-	#Saving the evoked LFP waveforms in an array
-    evoked = np.zeros((len(stim_timestamps), len(filtered_data), int(experiment.sample_rate*(evoked_pre + evoked_post))))
-    for i in (range(len(stim_timestamps))):
-        evoked[i,:,:] = filtered_data[:,int(stim_timestamps[i]-evoked_pre*experiment.sample_rate):int(stim_timestamps[i]+evoked_post*experiment.sample_rate)]
+    stim_timestamps = np.append(stim_timestamps, fake_stim[0])
+    stim_timestamps = np.append(stim_timestamps, fake_stim[1])
+
+    evoked = {}
+    for subsession in range(len(subsession_end_inds)+1):
+        stim_timestamps_subsession = stim_timestamps[np.where(np.logical_and((stim_timestamps > subsession_end_inds[subsession]), (stim_timestamps < subsession_end_inds[subsession])))]
+        #Saving the evoked LFP waveforms in an array
+        evoked_subsession = np.zeros((len(stim_timestamps_subsession), len(filtered_data), int(experiment.sample_rate*(evoked_pre + evoked_post))))
+        for i in (range(len(stim_timestamps))):
+            evoked_subsession[i,:,:] = filtered_data[:,int(stim_timestamps_subsession[i]-evoked_pre*experiment.sample_rate):int(stim_timestamps_subsession[i]+evoked_post*experiment.sample_rate)]
+        evoked[subsession] = evoked_subsession
+
     return evoked
 
 def read_evoked_lfp(group, session ,data):
@@ -81,14 +89,18 @@ def read_evoked_lfp(group, session ,data):
             with open(whisker_trigger_filepath, 'rb') as fid:
                 whisker_stim_trigger = np.fromfile(fid, np.int16)
                 whisker_stim_timestamps = extract_stim_timestamps_der(whisker_stim_trigger,experiment)
+                subsession_end_inds =session.break_down_to_subsessions(whisker_stim_timestamps)
                 f[session.subExperiment.name + '/group_{:g}/'.format(group) + session.name].create_dataset("whisker_stim_timestamps", data = whisker_stim_timestamps)
+                session.fake_whisker_stim = session.generate_fake_stim_trigger(whisker_stim_timestamps, session.whisker_stim_freq, subsession_end_inds)
 
         if session.preferences['do_optical_stim_evoked'] == 'y':
             optical_trigger_filepath = session.optical_stim_channel
             with open(optical_trigger_filepath, 'rb') as fid:
                 optical_stim_trigger = np.fromfile(fid, np.int16)
                 optical_stim_timestamps = extract_stim_timestamps_der(optical_stim_trigger, experiment)
+                subsession_end_inds =session.break_down_to_subsessions(whisker_stim_timestamps)
                 f[session.subExperiment.name + '/group_{:g}/'.format(group) + session.name].create_dataset("optical_stim_timestamps", data  = optical_stim_timestamps)
+                session.fake_optical_stim = session.generate_fake_stim_trigger(optical_stim_timestamps, session.optical_stim_freq, subsession_end_inds)
 
     elif experiment.fileformat == 'cont':
 		#Reading the digital input from file
@@ -127,7 +139,46 @@ def read_evoked_lfp(group, session ,data):
 
     if session.preferences['do_whisker_stim_evoked'] == 'y':
         whisker_evoked = read_evoked_lfp_from_stim_timestamps(filtered, whisker_stim_timestamps, experiment, 'whisker')
-        f[session.subExperiment.name + '/group_{:g}/'.format(group) + session.name].create_dataset("whisker_evoked_LFP", data = whisker_evoked)
+        whisker_stim_grp = f[session.subExperiment.name + '/group_{:g}/'.format(group) + session.name].create_group("whisker_evoked_LFP_stats")
+        analyze_evoked_LFP(whisker_evoked, session, 'whisker', whisker_stim_grp)
+
     if session.preferences['do_optical_stim_evoked'] == 'y':
         optical_evoked = read_evoked_lfp_from_stim_timestamps(filtered, optical_stim_timestamps, experiment, 'light')
-        f[session.subExperiment.name + '/group_{:g}/'.format(group) + session.name].create_dataset("optical_evoked_LFP", data = optical_evoked)
+        optical_stim_grp = f[session.subExperiment.name + '/group_{:g}/'.format(group) + session.name].create_group("optical_evoked_LFP_stats")
+        analyze_evoked_LFP(optical_evoked, session, 'optical', optical_stim_grp)
+
+def analyze_evoked_LFP(evoked, session, mode, grp):
+    experiment = session.subExperiment.experiment
+    num_subsessions = len(session.subsession_end_inds) - 1
+
+    time = np.linspace(-evoked_pre*1000, evoked_post*1000, (evoked_post + evoked_pre) * experiment.sample_rate)
+
+    if mode == 'whisker':
+        evoked_pre = experiment.whisker_evoked_pre
+        evoked_post = experiment.whisker_evoked_post
+
+    elif mode == 'optical':
+        evoked_pre = experiment.light_evoked_pre
+        evoked_post = experiment.light_evoked_post
+
+    for subsession in range(num_subsessions):
+        evoked_avg = np.mean(evoked[subsession],1) #Average evoked LFP waveforms across trials
+        evoked_std = np.std(evoked[subsession], 1) #Standard deviation of the evoked LFP waveforms across trials
+        evoked_err = evoked_std / math.sqrt(len(evoked[subsession])) #Standard error of the evoked LFP waveforms across trials
+
+        subses_grp = grp.create_group("subsession_{:g}".format(subsession))
+        subses_grp.create_dataset("mean_{:s}_evoked_LFP".format(mode), data = evoked_avg)
+        subses_grp.create_dataset("standard_deviation_{:s}_evoked_LFP".format(mode), data=evoked_std)
+        subses_grp.create_dataset("standard_error_{:s}_evoked_LFP".format(mode), data = evoked_err)
+
+        figure()
+        plot(time, evoked_avg[trode], 'k-')
+        fill_between(time, evoked_avg[trode]-evoked_err[trode], evoked_avg[trode]+evoked_err[trode])
+        xlabel('Time (ms)')
+        ylabel('Voltage (uV)')
+
+        ylim_min = np.floor(np.min(evoked[subsession]) / 100) * 100
+        ylim_max = np.ceil(np.max(evoked) / 100) * 100
+        ylim(ylim_min, ylim_max)
+        savefig(evoked_svg_path + 'electrode{:g}_evoked.svg'.format(trode), format = 'svg')
+        close()
