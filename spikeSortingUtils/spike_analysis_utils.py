@@ -5,10 +5,43 @@ author: Tansel Baran Yasar
 
 Contains the functions for analyzing spike trains.
 """
-
 import numpy as np
 from matplotlib.pyplot import *
 from LFPutils.read_evoked_lfp import *
+import h5py
+
+def generate_psths(location, group, spike_trains_location):
+    experiment = location.experiment
+    f = h5py.File(experiment.dir + '/analysis_results.hdf5', 'a')
+    ses_grp = f[location.name + '/group_{:g}/'.format(group) + session.name]
+    for session_index in location.sessions:
+        analysis_prefs = location.sessions[session_index].preferences
+        if analysis_prefs['do_whisker_stim_evoked'] == 'y':
+            whisker_stim_timestamps = ses_grp["whisker_stim_timestamps"]
+            subsession_end_inds =session.break_down_to_subsessions(whisker_stim_timestamps)
+            whisker_bounds = [experiment.whisker_evoked_pre, experiment.whisker_evoked_post]
+            whisker_evoked_trains, whisker_evoked_psths = get_psth(spike_trains_location[session_index], session, whisker_stim_timestamps, whisker_bounds, subsession_end_inds, session.fake_whisker_stim)
+            ses_grp.create_dataset("whisker_evoked_trains", data = whisker_evoked_trains)
+            ses_grp.create_dataset("whisker_evoked_psths", data = whisker_evoked_psths)
+
+        if analysis_prefs['do_optical_stim_evoked'] == 'y':
+            optical_stim_timestamps = ses_grp["optical_stim_timestamps"]
+            subsession_end_inds = session.break_down_to_subsessions(optical_stim_timestamps)
+            optical_bounds = [experiment.light_evoked_pre, experiment.light_evoked_post]
+            light_evoked_trains, light_evoked_psths = get_psth(spike_trains_location[session_index], session, optical_stim_timestamps, optical_bounds, subsession_end_inds, session.fake_optical_stim)
+            ses_grp.create_dataset("optical_evoked_trains", data = optical_evoked_trains)
+            ses_grp.create_dataset("optical_evoked_psths", data = whisker_evoked_psths)
+
+def break_down_to_sessions(location, spike_times, spike_trains):
+    end_inds = location.end_inds
+    spike_trains_location = {}
+    for session_index in location.sessions:
+        session = location.sessions[session_index]
+        spike_trains_session = spike_trains[end_inds[session_index]:end_inds[session_index+1]]
+        spike_trains_session = np.astype(spike_trains_session, 'int8')
+        spike_trains_location[session_index] = spike_trains_session
+
+    return spike_trains_location
 
 def firing_histogram(bin_size, spike_times, sample_rate, end_inds):
     """
@@ -58,7 +91,7 @@ def get_firing_rate(spike_times, end_inds, sample_rate):
     return firing_rate
 
 
-def get_psth(spike_times, stim, bounds, end_inds, bin_size, sample_rate):
+def get_psth(spike_trains, session, stim_timestamps, bounds, subsession_end_inds, fake_stim):
     """
     This function generates the PSTHs of the spike trains of the units provided for the given epochs of stimulation and anesthesia levels.
 
@@ -74,25 +107,33 @@ def get_psth(spike_times, stim, bounds, end_inds, bin_size, sample_rate):
         PSTH: The PSTHs of the units for the given epochs in an array of size KxLxMxN  where K is the number of units, L is the number of epochs, M is the number of stimulus trigger events for that epoch and N is the number of samples in the range for one PSTH
     """
 
+    experiment = session.subExperiment.experiment
+    sample_rate = experiment.sample_rate
+    bin_size = experiment.bin_size
+
     psth_range = np.arange(-bounds[0],bounds[1],bin_size) #range for the interval of psth bins
     evoked_range = np.arange(-bounds[0],bounds[1],1/sample_rate) #range for the evoked spike trains
-    stim_inds = extract_stim_timestamps_der(stim) #extracts stimulus timestamp indices
-    spike_train = np.zeros(int(end_inds[-1]))
     bin_size_inds = int(sample_rate * bin_size) #converting bin size from seconds to samples
+    num_subsessions = len(subsession_end_inds) + 1
 
-    for unit in range(len(spike_times)):
-        spike_train[spike_times[unit]] = 1 #spike train of the unit being analyzed
-        for epoch in range(len(end_inds)-1):
-            stim_inds_epoch = stim_inds[np.where(np.logical_and((stim_inds > end_inds[0]), (stim_inds < end_inds[1])))] #Extracting the stim indices that fall inside the epoch of interest
-            evoked_train = np.zeros((len(stim_inds_epoch), len(evoked_range)))
-            evoked_psth = np.zeros((len(stim_inds_epoch), len(psth_range)))
+    stim_timestamps = np.append(stim_timestamps, fake_stim[0])
+    stim_timestamps = np.append(stim_timestamps, fake_stim[1])
+
+    for unit in range(len(spike_trains)):
+        evoked_trains = {}
+        evoked_psths = {}
+        for subsession in range(num_subsessions):
+            stim_timestamps_subsession = stim_timestamps[np.where(np.logical_and((stim_timestamps > subsession_end_inds[subsession]), (stim_timestamps < subsession_end_inds[subsession])))] #Extracting the stim indices that fall inside the epoch of interest
+            evoked_train = np.zeros((len(stim_timestamps_subsession), len(evoked_range)))
+            evoked_psth = np.zeros((len(subsession_end_inds), len(psth_range)))
             for i, stim_ind in enumerate(stim_inds_epoch):
                 evoked_train[i] = spike_train[(stim_ind-bounds[0]*sample_rate/1000.):(stim_ind+bounds[1]*sample_rate/1000.)]
             for bin in range(len(psth_range)):
                 evoked_psth[bin] = np.sum(evoked_train[:,bin*bin_size_inds:(bin+1)*bin_size_inds])
-        spike_train = np.zeros(int(end_inds[-1])) #Resetting the spike train before analyzing the next unit
+            evoked_trains[subsession] = evoked_train
+            evoked_psths[subsession] = evoked_psth
+    return evoked_trains, evoked_psths
 
-    return evoked_psth
 
 def plot_firing_histogram(hist, unit, bin_size, end_inds, sample_rate):
     """
@@ -114,7 +155,7 @@ def plot_firing_histogram(hist, unit, bin_size, end_inds, sample_rate):
     show()
 
 def plot_psth(unit, evoked_psth, psth_range):
-    figure()
+    figure()f[location.name + '/group_{:g}/'.format(group) + session.name+"/optical_stim_timestamps"]*
     plot(psth_range, np.mean(evoked_psth, 0))
     axvline(0, color = 'r', linestyle = 'dashed')
     xlabel('Time (ms)')
