@@ -63,6 +63,7 @@ def initialize_spike_sorting_notebook_for_group(location, group):
         1:[],}
         unit_indices = get_unit_indices(units, better_clusters)
         spike_times, spike_trains = get_unit_spike_times_and_trains(unit_indices, better_peaktimes, location)
+        spike_trains_location = break_down_to_sessions(location, spike_times, spike_trains)
         """
 
     psth_header = """## Generating PSTHs for sessions based on provided stim preferences"""
@@ -117,6 +118,7 @@ def get_unit_indices(units, clusters):
 def get_unit_spike_times_and_trains(unit_indices, time, peak_times, global_params):
     spike_times = {}
     spike_trains = np.zeros((len(unit_indices), len(time)))
+    spike_trains = spike_trains.astype('int8')
 
     for unit in range(len(unit_indices)):
         spike_times_ind = peak_times[unit_indices[unit]]

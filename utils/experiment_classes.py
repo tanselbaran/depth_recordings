@@ -45,9 +45,15 @@ class Session:
         preferences = {}
         print(self.name)
         preferences['do_whisker_stim_evoked'] = self.get_input_for_pref("Do whisker stimulation evoked analysis for this session? (y/n)")
+        if preferences['do_whisker_stim_evoked'] == 'y':
+            self.whisker_stim_freq = float(input('What is the whisker stimulation frequency (Hz)?'))
+            self.generate_fake_whisker_stim = input("Generate fake stim trigger for spontaneous parts of the session? (y/n)")
         preferences['do_optical_stim_evoked'] = self.get_input_for_pref("Do optical stimulation evoked analysis for this session? (y/n)")
+        if preferences['do_optical_stim_evoked'] == 'y':
+            self.optical_stim_freq = float(input('What is the optical stimulation frequency (Hz)?'))
+            self.generate_fake_optical_stim = input("Generate fake stim trigger for spontaneous parts of the session? (y/n)")
         preferences['do_electrical_stim_evoked'] = self.get_input_for_pref("Do electrical stimulation evoked analysis for this session? (y/n)")
-        preferences["do_spectogram_analysis"] = self.get_input_for_pref("Do spectogram analysis on low frequency LFP for this session? (y/n)")
+        preferences["do_spectrogram_analysis"] = self.get_input_for_pref("Do spectrogram analysis on low frequency LFP for this session? (y/n)")
         self.preferences = preferences
 
     def set_amplifier(self):
@@ -68,6 +74,24 @@ class Session:
         if self.preferences['do_electrical_stim_evoked'] == 'y':
             #TO BE FILLED
             pass
+
+    def break_down_to_subsessions(self, stim_timestamps, mode='auto'):
+        sample_rate = self.subExperiment.experiment.sample_rate
+        if mode == 'auto':
+            stim_begin = stim_timestamps[0]
+            stim_end = stim_timestamps[-1] + sample_rate
+            subsession_end_inds = [0, stim_begin, stim_end, -1]
+        elif mode == 'manual':
+            subsession_end_inds = input('Please enter the time boundaries of different subsessions in seconds (separated with commas)')
+            subsession_end_inds = subsession_end_inds.split(',')
+            subsession_end_inds = int(subsession_end_inds*sample_rate)
+        return subsession_end_inds
+
+    def generate_fake_stim_trigger(self, stim_timestamps, frequency, subsession_end_inds):
+        fake_stim_trigger_prestim = np.arange(subsession_end_inds[0], subsession_end_inds[1], (1/frequency)*self.subExperiment.experiment.sample_rate)
+        fake_stim_trigger_poststim = np.arange(subsession_end_inds[2], subsession_end_inds[3], (1/frequency)*self.subExperiment.experiment.sample_rate)
+        return fake_stim_trigger_prestim, fake_stim_trigger_poststim
+
 
 class acute(Experiment):
 
