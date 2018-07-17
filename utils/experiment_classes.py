@@ -1,21 +1,8 @@
 from glob import glob
-from probe_classes import *
 import importlib
+import numpy as np
 
 class Experiment:
-    def createProbe(self, probe_name):
-        probe_module = importlib.import_module('probe_files.'+probe_name)
-        probe_info = probe_module.probe_info
-        probe_type = probe_info['type']
-        if probe_type == 'tetrode':
-            self.probe = tetrode(probe_name)
-        elif probe_type == 'linear':
-            self.probe = linear(probe_name)
-        elif probe_type == 'array':
-            self.probe = array(probe_name)
-        else:
-            raise ValueError('Invalid probe type.')
-
     def get_input_for_pref(self,statement):
         while True:
             inpt = input(statement)
@@ -75,21 +62,31 @@ class Session:
             #TO BE FILLED
             pass
 
-    def break_down_to_subsessions(self, stim_timestamps, mode='auto'):
+    def createProbe(self, probe_name):
+        probe_module = importlib.import_module('probe_files.'+probe_name)
+        probe_class = getattr(probe_module, probe_name)
+
+        self.probe = probe_class()
+        self.probe.get_channel_mapping(self.amplifier)
+        self.probe.get_channel_coords()
+
+    def break_down_to_subsessions(self, stim_timestamps, length, mode='auto'):
         sample_rate = self.subExperiment.experiment.sample_rate
         if mode == 'auto':
-            stim_begin = stim_timestamps[0]
-            stim_end = stim_timestamps[-1] + sample_rate
-            subsession_end_inds = [0, stim_begin, stim_end, -1]
+            stim_begin = int(stim_timestamps[0])
+            stim_end = int(stim_timestamps[-1] + sample_rate)
+            subsession_end_inds = [0, stim_begin, stim_end, length]
         elif mode == 'manual':
             subsession_end_inds = input('Please enter the time boundaries of different subsessions in seconds (separated with commas)')
             subsession_end_inds = subsession_end_inds.split(',')
             subsession_end_inds = int(subsession_end_inds*sample_rate)
         return subsession_end_inds
 
-    def generate_fake_stim_trigger(self, stim_timestamps, frequency, subsession_end_inds):
-        fake_stim_trigger_prestim = np.arange(subsession_end_inds[0], subsession_end_inds[1], (1/frequency)*self.subExperiment.experiment.sample_rate)
-        fake_stim_trigger_poststim = np.arange(subsession_end_inds[2], subsession_end_inds[3], (1/frequency)*self.subExperiment.experiment.sample_rate)
+    def generate_fake_stim_trigger(self, stim_timestamps, frequency, sample_rate, subsession_end_inds):
+        fake_stim_trigger_prestim = np.arange(subsession_end_inds[0], subsession_end_inds[1], (1/frequency)*sample_rate)
+        fake_stim_trigger_poststim = np.arange(subsession_end_inds[2], subsession_end_inds[3], (1/frequency)*sample_rate)
+        fake_stim_trigger_prestim = fake_stim_trigger_prestim.astype('int')
+        fake_stim_trigger_poststim = fake_stim_trigger_poststim.astype('int')
         return fake_stim_trigger_prestim, fake_stim_trigger_poststim
 
 
@@ -112,6 +109,7 @@ class acute(Experiment):
 class subExperiment:
     def __init__(self, location_dir, experiment):
         self.dir = location_dir
+        self.name = self.dir.split('/')[-1]
         self.sessions = {}
         self.experiment = experiment
 
@@ -153,3 +151,14 @@ class Location(subExperiment):
 
 class Day(subExperiment):
     pass
+
+class Probe:
+    def __init__(self, probe_name):
+        self.name = probe_name
+        self.probe_module = importlib.import_module('probe_files.'+probe_name)
+
+    def remove_dead_channels(self, dead_channels):
+        for group in range(len(self.id)):
+            dead_channels_in_group = np.in1d(self.id[group], dead_channels)
+            self.id[group] = np.delete(self.id[group], np.where(dead_channels_in_group == True)[0])
+            self.coords[group] = np.delete(self.coords[group], np.where(dead_channels_in_group == True)[0])
