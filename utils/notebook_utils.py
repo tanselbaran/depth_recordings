@@ -12,76 +12,73 @@ from IPython.display import display
 import nbformat as nbf
 
 
-def initialize_spike_sorting_notebook_for_group(location, group):
+def initialize_spike_sorting_notebook_for_group(location_index, location, group):
     nb = nbf.v4.new_notebook()
     experiment = location.experiment
 
     header = """# Notebook for analyzing location: {:s},  group: {:g} in experiment: {:s}
-            """.format(location.name, group, experiment.dir)
+            """.format(location.name, group, experiment.name)
 
     import_header = """## Importing necessary packages and initializing objects"""
     import_code = """from spikeSortingUtils.custom_spike_sorting_utils import *
-    import numpy as np
-    import os
-    import pickle as p
-    from surfaceRecUtils.surface_rec_notebook_utils import *
-    from surfaceRecUtils.simple_clustering_utils import *
-    import h5py
+import numpy as np
+import os
+import pickle as p
+from utils.notebook_utils import *
+from spikeSortingUtils.simple_clustering_utils import *
+import h5py
 
-    %matplotlib notebook
+%matplotlib notebook
 
-    experiment_main_folder = {:s}
-    experiment = p.load(open(experiment_main_folder + '/experiment_params.p'), 'rb')
-    location = experiment.locations[{:g}]
-    analysis_files_folder = location.dir+'/analysis_files/group_{:g}/'
-    """.format(experiment.dir, location_index, group)
+experiment_main_folder = {:s}
+experiment = p.load(open(experiment_main_folder + '/experiment_params.p'), 'rb')
+location = experiment.locations[{:g}]
+analysis_files_folder = location.dir+'/analysis_files/group_{:g}/'""".format(experiment.dir, location_index, group)
 
     read_location_header = """## Reading the data and extracting waveforms from this location"""
     read_location_code = """location_output = read_location(location, {:g})
-    clusters, projection = PCA_and_cluster(location_output['waveforms'], location)
-    save_clusters_to_pickle(clusters, projection, location_output['peak_times'], (analysis_files_folder+'cluster_info.p'))
-    display_widget(location_output['waveforms'], plot_params, location, ['clusters', 'ind_on'], clusters)""".format(group)
+clusters, projection = PCA_and_cluster(location_output['waveforms'], location)
+save_clusters_to_pickle(clusters, projection, location_output['peak_times'], (analysis_files_folder+'cluster_info.p'))
+display_widget(location_output['waveforms'], plot_params, location, ['clusters', 'ind_on'], clusters)""".format(group)
 
     good_reclustering_header = """## Reclustering the selected waveforms"""
     good_reclustering_code = """good_cluster_indices = []
-    (good_clusters, good_waveforms, good_peaktimes, good_projection) = recluster(waveforms, location, peak_times, clusters, good_cluster_indices)
-    save_reclusters_to_pickle(good_clusters, good_projection, good_peaktimes, (analysis_files_folder+'good_cluster_info.p'))
-    display_widget(good_waveforms, plot_params, location, ['clusters', 'ind_on'], good_clusters)"""
+(good_clusters, good_waveforms, good_peaktimes, good_projection) = recluster(waveforms, location, peak_times, clusters, good_cluster_indices)
+save_reclusters_to_pickle(good_clusters, good_projection, good_peaktimes, (analysis_files_folder+'good_cluster_info.p'))
+display_widget(good_waveforms, plot_params, location, ['clusters', 'ind_on'], good_clusters)"""
 
     better_reclustering_header = """## Reclustering selected waveforms again"""
     better_reclustering_code = """better_cluster_indices = []
-    (better_clusters, better_waveforms, better_peaktimes, better_projection) = recluster(good_waveforms, location, good_peaktimes, good_clusters, better_cluster_indices)
-    del good_waveforms
-    save_reclusters_to_pickle(better_clusters, better_projection, better_peaktimes, (analysis_files_folder+'better_cluster_info.p'))
-    display_widget(better_waveforms, plot_params, location, ['clusters', 'ind_on'], better_clusters)"""
+(better_clusters, better_waveforms, better_peaktimes, better_projection) = recluster(good_waveforms, location, good_peaktimes, good_clusters, better_cluster_indices)
+del good_waveforms
+save_reclusters_to_pickle(better_clusters, better_projection, better_peaktimes, (analysis_files_folder+'better_cluster_info.p'))
+display_widget(better_waveforms, plot_params, location, ['clusters', 'ind_on'], better_clusters)"""
 
     sorting_header = """## Sorting into units"""
     sorting_code = """noise = []
-    multi_unit = []
-    units = {
-        0:[],
-        1:[],}
-        unit_indices = get_unit_indices(units, better_clusters)
-        spike_times, spike_trains = get_unit_spike_times_and_trains(unit_indices, better_peaktimes, location)
-        spike_trains_location = break_down_to_sessions(location, spike_times, spike_trains)
-        """
+multi_unit = []
+units = {
+    0:[],
+    1:[],}
+unit_indices = get_unit_indices(units, better_clusters)
+spike_times, spike_trains = get_unit_spike_times_and_trains(unit_indices, better_peaktimes, location)
+spike_trains_location = break_down_to_sessions(location, spike_times, spike_trains)"""
 
     psth_header = """## Generating PSTHs for sessions based on provided stim preferences"""
     psth_code = """generate_psths(location, spike_times)"""
 
     saving_header = """## Saving the spike trains, waveforms and PSTHs in hdf file"""
     saving_code = """f = h5py.File(experiment_main_folder + '/analysis_results.hdf5', 'a')
-    ch_grp = f[location.name + '/group_{:g}']
-    spike_grp = ch_grp.create_group('spike_results')
-    spike_grp.create_dataset("spike_trains", spike_trains)
-    spike_grp.create_dataset("spike_times", spike_times)
-    spike_grp.create_dataset("unit_indices", unit_indices)
-    spike_grp.create_dataset("waveforms", better_waveforms)
-    if whisker_stim_psth in locals():
-        spike_grp.create_dataset("whisker_stim_psth",whisker_stim_psth)
-    if optical_stim_psth in locals():
-        spike_grp.create_dataset("optical_stim_psth", optical_stim_psth)
-    """.format(group, )
+ch_grp = f[location.name + '/group_{:g}']
+spike_grp = ch_grp.create_group('spike_results')
+spike_grp.create_dataset("spike_trains", spike_trains)
+spike_grp.create_dataset("spike_times", spike_times)
+spike_grp.create_dataset("unit_indices", unit_indices)
+spike_grp.create_dataset("waveforms", better_waveforms)
+if whisker_stim_psth in locals():
+    spike_grp.create_dataset("whisker_stim_psth",whisker_stim_psth)
+if optical_stim_psth in locals():
+    spike_grp.create_dataset("optical_stim_psth", optical_stim_psth)""".format(group, )
 
     nb['cells'] = [nbf.v4.new_markdown_cell(header),
                         nbf.v4.new_markdown_cell(import_header),
@@ -99,8 +96,7 @@ def initialize_spike_sorting_notebook_for_group(location, group):
                         nbf.v4.new_markdown_cell(saving_header),
                         nbf.v4.new_code_cell(saving_code)]
 
-    nbf.write(nb, 'test.ipynb')
-
+    nbf.write(nb, location.dir+'/analysis_files/group_{:g}/spike_sorting_notebook.ipynb'.format(group))
 ### Utilities for processing the units
 
 def get_unit_indices(units, clusters):
