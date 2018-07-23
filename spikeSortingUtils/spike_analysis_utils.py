@@ -18,17 +18,15 @@ def generate_psths(location, group, spike_trains_location):
         analysis_prefs = location.sessions[session_index].preferences
         if analysis_prefs['do_whisker_stim_evoked'] == 'y':
             whisker_stim_timestamps = ses_grp["whisker_stim_timestamps"]
-            subsession_end_inds =session.break_down_to_subsessions(whisker_stim_timestamps)
             whisker_bounds = [experiment.whisker_evoked_pre, experiment.whisker_evoked_post]
-            whisker_evoked_trains, whisker_evoked_psths = get_psth(spike_trains_location[session_index], session, whisker_stim_timestamps, whisker_bounds, subsession_end_inds, session.fake_whisker_stim)
+            whisker_evoked_trains, whisker_evoked_psths = get_psth(spike_trains_location[session_index], session, whisker_stim_timestamps, whisker_bounds, session.fake_whisker_stim)
             ses_grp.create_dataset("whisker_evoked_trains", data = whisker_evoked_trains)
             ses_grp.create_dataset("whisker_evoked_psths", data = whisker_evoked_psths)
 
         if analysis_prefs['do_optical_stim_evoked'] == 'y':
             optical_stim_timestamps = ses_grp["optical_stim_timestamps"]
-            subsession_end_inds = session.break_down_to_subsessions(optical_stim_timestamps)
             optical_bounds = [experiment.light_evoked_pre, experiment.light_evoked_post]
-            light_evoked_trains, light_evoked_psths = get_psth(spike_trains_location[session_index], session, optical_stim_timestamps, optical_bounds, subsession_end_inds, session.fake_optical_stim)
+            light_evoked_trains, light_evoked_psths = get_psth(spike_trains_location[session_index], session, optical_stim_timestamps, optical_bounds, session.fake_optical_stim)
             ses_grp.create_dataset("optical_evoked_trains", data = optical_evoked_trains)
             ses_grp.create_dataset("optical_evoked_psths", data = whisker_evoked_psths)
 
@@ -91,7 +89,7 @@ def get_firing_rate(spike_times, end_inds, sample_rate):
     return firing_rate
 
 
-def get_psth(spike_trains, session, stim_timestamps, bounds, subsession_end_inds, fake_stim):
+def get_psth(spike_trains, session, stim_timestamps, bounds):
     """
     This function generates the PSTHs of the spike trains of the units provided for the given epochs of stimulation and anesthesia levels.
 
@@ -114,24 +112,18 @@ def get_psth(spike_trains, session, stim_timestamps, bounds, subsession_end_inds
     psth_range = np.arange(-bounds[0],bounds[1],bin_size) #range for the interval of psth bins
     evoked_range = np.arange(-bounds[0],bounds[1],1/sample_rate) #range for the evoked spike trains
     bin_size_inds = int(sample_rate * bin_size) #converting bin size from seconds to samples
-    num_subsessions = len(subsession_end_inds) + 1
 
-    stim_timestamps = np.append(stim_timestamps, fake_stim[0])
-    stim_timestamps = np.append(stim_timestamps, fake_stim[1])
-
+    evoked_trains = {}
+    evoked_psths = {}
     for unit in range(len(spike_trains)):
-        evoked_trains = {}
-        evoked_psths = {}
-        for subsession in range(num_subsessions):
-            stim_timestamps_subsession = stim_timestamps[np.where(np.logical_and((stim_timestamps > subsession_end_inds[subsession]), (stim_timestamps < subsession_end_inds[subsession])))] #Extracting the stim indices that fall inside the epoch of interest
-            evoked_train = np.zeros((len(stim_timestamps_subsession), len(evoked_range)))
-            evoked_psth = np.zeros((len(subsession_end_inds), len(psth_range)))
-            for i, stim_ind in enumerate(stim_inds_epoch):
-                evoked_train[i] = spike_train[(stim_ind-bounds[0]*sample_rate/1000.):(stim_ind+bounds[1]*sample_rate/1000.)]
-            for bin in range(len(psth_range)):
-                evoked_psth[bin] = np.sum(evoked_train[:,bin*bin_size_inds:(bin+1)*bin_size_inds])
-            evoked_trains[subsession] = evoked_train
-            evoked_psths[subsession] = evoked_psth
+        evoked_train = np.zeros((len(stim_timestamps), len(evoked_range)))
+        evoked_psth = np.zeros(len(psth_range))
+        for i, stim_ind in enumerate(stim_timestamps):
+            evoked_train[i] = spike_train[(stim_ind-bounds[0]*sample_rate/1000.):(stim_ind+bounds[1]*sample_rate/1000.)]
+        for bin in range(len(psth_range)):
+            evoked_psth[bin] = np.sum(evoked_train[:,bin*bin_size_inds:(bin+1)*bin_size_inds])
+        evoked_trains[unit] = evoked_train
+        evoked_psths[unit] = evoked_psth
     return evoked_trains, evoked_psths
 
 
