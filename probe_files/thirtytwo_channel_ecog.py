@@ -1,7 +1,7 @@
 import numpy as np
 from utils.experiment_classes import *
 class thirtytwo_channel_ecog(Probe):
-    def __init__(self, experiment):
+    def __init__(self,):
         self.nr_of_groups = 4
         self.type = 'array'
         self.nr_of_electrodes_per_group = 8
