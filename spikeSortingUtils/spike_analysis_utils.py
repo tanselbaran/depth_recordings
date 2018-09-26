@@ -13,30 +13,34 @@ import h5py
 def generate_psths(location, group, spike_trains_location):
     experiment = location.experiment
     f = h5py.File(experiment.dir + '/analysis_results.hdf5', 'a')
-    ses_grp = f[location.name + '/group_{:g}/'.format(group) + session.name]
+
     for session_index in location.sessions:
+        session = location.sessions[session_index]
+        ses_grp = f[location.name + '/' + session.name]
+        ch_grp = ses_grp['group_{:g}'.format(group)]
+
         analysis_prefs = location.sessions[session_index].preferences
         if analysis_prefs['do_whisker_stim_evoked'] == 'y':
             whisker_stim_timestamps = ses_grp["whisker_stim_timestamps"]
-            whisker_bounds = [experiment.whisker_evoked_pre, experiment.whisker_evoked_post]
-            whisker_evoked_trains, whisker_evoked_psths = get_psth(spike_trains_location[session_index], session, whisker_stim_timestamps, whisker_bounds, session.fake_whisker_stim)
-            ses_grp.create_dataset("whisker_evoked_trains", data = whisker_evoked_trains)
-            ses_grp.create_dataset("whisker_evoked_psths", data = whisker_evoked_psths)
+            whisker_bounds = [experiment.whisker_evoked_pre/1000, experiment.whisker_evoked_post/1000]
+            whisker_evoked_trains, whisker_evoked_psths = get_psth(spike_trains_location[session_index], session, whisker_stim_timestamps, whisker_bounds)
+            ch_grp.create_dataset("whisker_evoked_trains", data = whisker_evoked_trains)
+            ch_grp.create_dataset("whisker_evoked_psths", data = whisker_evoked_psths)
 
         if analysis_prefs['do_optical_stim_evoked'] == 'y':
             optical_stim_timestamps = ses_grp["optical_stim_timestamps"]
-            optical_bounds = [experiment.light_evoked_pre, experiment.light_evoked_post]
-            light_evoked_trains, light_evoked_psths = get_psth(spike_trains_location[session_index], session, optical_stim_timestamps, optical_bounds, session.fake_optical_stim)
-            ses_grp.create_dataset("optical_evoked_trains", data = optical_evoked_trains)
-            ses_grp.create_dataset("optical_evoked_psths", data = whisker_evoked_psths)
+            optical_bounds = [experiment.optical_evoked_pre/1000, experiment.optical_evoked_post/1000]
+            optical_evoked_trains, optical_evoked_psths = get_psth(spike_trains_location[session_index], session, optical_stim_timestamps, optical_bounds)
+            ch_grp.create_dataset("optical_evoked_trains", data = optical_evoked_trains)
+            ch_grp.create_dataset("optical_evoked_psths", data = optical_evoked_psths)
 
 def break_down_to_sessions(location, spike_times, spike_trains):
     end_inds = location.end_inds
     spike_trains_location = {}
     for session_index in location.sessions:
         session = location.sessions[session_index]
-        spike_trains_session = spike_trains[end_inds[session_index]:end_inds[session_index+1]]
-        spike_trains_session = np.astype(spike_trains_session, 'int8')
+        spike_trains_session = spike_trains[:,int(end_inds[session_index]):int(end_inds[session_index+1])]
+        spike_trains_session = spike_trains_session.astype('int8')
         spike_trains_location[session_index] = spike_trains_session
 
     return spike_trains_location
@@ -110,20 +114,17 @@ def get_psth(spike_trains, session, stim_timestamps, bounds):
     bin_size = experiment.bin_size
 
     psth_range = np.arange(-bounds[0],bounds[1],bin_size) #range for the interval of psth bins
-    evoked_range = np.arange(-bounds[0],bounds[1],1/sample_rate) #range for the evoked spike trains
-    bin_size_inds = int(sample_rate * bin_size) #converting bin size from seconds to samples
+    bin_size_inds = int(sample_rate * bin_size/1000) #converting bin size from seconds to samples
 
-    evoked_trains = {}
-    evoked_psths = {}
+    evoked_psths = np.zeros((len(spike_trains), len(psth_range)))
+    evoked_trains = np.zeros((len(spike_trains),int((bounds[1]+bounds[0])*sample_rate/1000)))
+
     for unit in range(len(spike_trains)):
-        evoked_train = np.zeros((len(stim_timestamps), len(evoked_range)))
-        evoked_psth = np.zeros(len(psth_range))
         for i, stim_ind in enumerate(stim_timestamps):
-            evoked_train[i] = spike_train[(stim_ind-bounds[0]*sample_rate/1000.):(stim_ind+bounds[1]*sample_rate/1000.)]
+            evoked_trains[unit] = evoked_trains[unit] +  spike_trains[unit][(int((stim_ind-bounds[0])*sample_rate/1000.)):(int((stim_ind+bounds[1])*sample_rate/1000.))]
+        evoked_trains[unit] = evoked_trains[unit] / len(stim_timestamps)
         for bin in range(len(psth_range)):
-            evoked_psth[bin] = np.sum(evoked_train[:,bin*bin_size_inds:(bin+1)*bin_size_inds])
-        evoked_trains[unit] = evoked_train
-        evoked_psths[unit] = evoked_psth
+            evoked_psths[unit][bin] = np.sum(evoked_trains[unit][bin*bin_size_inds:(bin+1)*bin_size_inds])
     return evoked_trains, evoked_psths
 
 
@@ -147,7 +148,7 @@ def plot_firing_histogram(hist, unit, bin_size, end_inds, sample_rate):
     show()
 
 def plot_psth(unit, evoked_psth, psth_range):
-    figure()f[location.name + '/group_{:g}/'.format(group) + session.name+"/optical_stim_timestamps"]*
+    figure()
     plot(psth_range, np.mean(evoked_psth, 0))
     axvline(0, color = 'r', linestyle = 'dashed')
     xlabel('Time (ms)')

@@ -32,14 +32,8 @@ class Session:
         preferences = {}
         print(self.name)
         preferences['do_whisker_stim_evoked'] = self.get_input_for_pref("Do whisker stimulation evoked analysis for this session? (y/n)")
-        if preferences['do_whisker_stim_evoked'] == 'y':
-            self.whisker_stim_freq = float(input('What is the whisker stimulation frequency (Hz)?'))
-            self.generate_fake_whisker_stim = input("Generate fake stim trigger for spontaneous parts of the session? (y/n)")
         preferences['do_optical_stim_evoked'] = self.get_input_for_pref("Do optical stimulation evoked analysis for this session? (y/n)")
-        if preferences['do_optical_stim_evoked'] == 'y':
-            self.optical_stim_freq = float(input('What is the optical stimulation frequency (Hz)?'))
-            self.generate_fake_optical_stim = input("Generate fake stim trigger for spontaneous parts of the session? (y/n)")
-        preferences['do_electrical_stim_evoked'] = self.get_input_for_pref("Do electrical stimulation evoked analysis for this session? (y/n)")
+        #preferences['do_electrical_stim_evoked'] = self.get_input_for_pref("Do electrical stimulation evoked analysis for this session? (y/n)")
         preferences["do_spectrogram_analysis"] = self.get_input_for_pref("Do spectrogram analysis on low frequency LFP for this session? (y/n)")
         self.preferences = preferences
 
@@ -58,9 +52,9 @@ class Session:
             self.whisker_stim_channel = self.dir + '/' + prefix + str(args[0]) + '.dat'
         if self.preferences['do_optical_stim_evoked'] == 'y':
             self.optical_stim_channel = self.dir + '/' + prefix + str(args[1]) + '.dat'
-        if self.preferences['do_electrical_stim_evoked'] == 'y':
+        #if self.preferences['do_electrical_stim_evoked'] == 'y':
             #TO BE FILLED
-            pass
+            
 
     def createProbe(self, probe_name):
         probe_module = importlib.import_module('probe_files.'+probe_name)

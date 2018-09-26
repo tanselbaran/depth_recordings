@@ -13,6 +13,7 @@ import os
 import utils.OpenEphys
 import pickle
 from scipy import signal
+import h5py
 
 def read_amplifier_dat_file(filepath):
     """
@@ -48,80 +49,85 @@ def read_time_dat_file(filepath, sample_rate):
     time_file = raw_array / float(sample_rate) #converting from int32 to seconds
     return time_file
 
-def read_group(group,session):
+def extract_stim_timestamps_der(stim, experiment):
+    stim_diff = np.diff(stim)
+    stim_timestamps = np.where(stim_diff > 0)[0]
+
+    #Cutting the triggers that happen too close to the beginning or the end of the recording session
+    stim_timestamps = stim_timestamps[(stim_timestamps > (experiment.cut_beginning*experiment.sample_rate))]
+    stim_timestamps = stim_timestamps[(stim_timestamps < (len(stim) - experiment.cut_end*experiment.sample_rate))]
+
+    return stim_timestamps
+
+def read_stimulus_trigger(session):
+    experiment = session.subExperiment.experiment
+    stim_timestamps = {}
+    f = h5py.File(experiment.dir + '/analysis_results.hdf5', 'a')
+
+    if experiment.fileformat == 'dat':
+
+        if session.preferences['do_whisker_stim_evoked'] == 'y':
+            whisker_trigger_filepath = session.whisker_stim_channel
+            with open(whisker_trigger_filepath, 'rb') as fid:
+                whisker_stim_trigger = np.fromfile(fid, np.int16)
+            whisker_stim_timestamps = (extract_stim_timestamps_der(whisker_stim_trigger,experiment) / experiment.downsampling_factor)
+            whisker_stim_timestamps = whisker_stim_timestamps.astype('int')
+            stim_timestamps['whisker_stim_timestamps'] = whisker_stim_timestamps
+            f[session.subExperiment.name + '/' + session.name].create_dataset("whisker_stim_timestamps", data = whisker_stim_timestamps)
+
+        if session.preferences['do_optical_stim_evoked'] == 'y':
+            optical_trigger_filepath = session.optical_stim_channel
+            with open(optical_trigger_filepath, 'rb') as fid:
+                optical_stim_trigger = np.fromfile(fid, np.int16)
+            optical_stim_timestamps = (extract_stim_timestamps_der(optical_stim_trigger, experiment)/ experiment.downsampling_factor)
+            optical_stim_timestamps = optical_stim_timestamps.astype('int')
+            stim_timestamps['optical_stim_timestamps'] = optical_stim_timestamps
+            f[session.subExperiment.name + '/' + session.name].create_dataset("optical_stim_timestamps", data  = optical_stim_timestamps)
+
+    elif experiment.fileformat == 'cont':
+        #TO DO
+        pass
+
+    elif experiment.fileformat == 'rhd':
+        #TO DO
+        pass
+
+    return stim_timestamps
+
+def read_channel(session, group, trode, chunk_inds):
     """
-    This function reads the data for a given tetrode or the shank of a linear probe for a recording session and returns it as an array. It supports 'file_per_channel' ('dat') and 'file_per_recording' ('rhd') options of the Intan software and data from Open Ephys software ('cont'). It also saves this array in a .dat file in case spike sorting will be performed.
-
-    Inputs:
-        probe: Index specifying the probe (can be >0 in case of experiments with simultaneous recordings from multiple probes)
-        s: Index specifying the shank (starting from 0, left to right)
-        p: Parameters dictionary for the recording session to be analyzed
-
-    Outputs:
-        group_file: Numpy array containing the data from all electrodes in the tetrode or shank
-
-    The function also generates a .dat file that contains the data for the tetrode in the format of ch0[t=0], ch1[t=0], ch2[t=0], ch3[t=0], ch0[t=1], ch1[t=1] etc.
-
+    TO DO
+    -Write documentation
+    -Prevent reading the whole data file every single time a chunk is going to be read
     """
     experiment = session.subExperiment.experiment
     probe = experiment.probe
     id = probe.id #Reading the channel id file from the parameters dictionary
-    #If not exists, create a folder where the analysis files for the entire experiment would be stored for klusta purposes
-    if not os.path.exists(session.subExperiment.dir + '/analysis_files'):
-        os.mkdir(session.subExperiment.dir + '/analysis_files')
+    electrode_index = id[group][trode]
 
-    if experiment.fileformat == 'dat' or experiment.fileformat == 'cont':
-        #If not exists, create a dictionary for the intermediate files for the channel group (shank or tetrode)
-        if not os.path.exists(session.subExperiment.dir + '/analysis_files/group_{:g}'.format(group)):
-            os.mkdir(session.subExperiment.dir + '/analysis_files/group_{:g}'.format(group))
-
-        #Read the first electrode in the tetrode or shank to have a definite length for the group file array
-        if experiment.fileformat == 'dat':
-            #For the "channel per file" option of Intan
-            if id[group][0] < 10:
-                prefix = '00'
-            else:
-                prefix = '0'
-            electrode0_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' +prefix + str(int(id[group][0])) + '.dat'
-            electrode0_signal = read_amplifier_dat_file(electrode0_path)
-            electrode0 = signal.decimate(electrode0_signal, 30)
+    if experiment.fileformat == 'dat':
+        #For the "channel per file" option of Intan
+        if electrode_index < 10:
+            prefix = '00'
         else:
-            #For the OpenEphys files
-            electrode0_path = session.dir+ '/100_CH' + str(int(id[group][0]) + 1) + '.continuous'
-            electrode0_dict = OpenEphys.load(electrode0_path)
-            electrode0 = electrode0_dict['data']
+            prefix = '0'
+        electrode_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' +prefix + str(int(electrode_index)) + '.dat'
+        electrode_data = read_amplifier_dat_file(electrode_path)
+        electrode_data = electrode_data[chunk_inds[0]:chunk_inds[1]]
 
-        #Reading the rest of the electrodes in the tetrode or the shank
+    elif experiment.fileformat =='cont':
+        #For the OpenEphys files
+        electrode_path = session.dir+ '/100_CH' + str(int(electrode_index) + 1) + '.continuous'
+        electrode_dict = OpenEphys.load(electrode_path)
+        electrode_data = electrode_dict['data']
 
-        group_file = np.zeros((len(probe.id[group]), len(electrode0))) #Create  the array of the group file
-        group_file[0] = electrode0
-        for trode in range(1,len(probe.id[group])):
-            if experiment.fileformat == 'dat':
-                #For the "channel per file" option of Intan
-                if id[group][trode] < 10:
-                    prefix = '00'
-                else:
-                    prefix = '0'
-                electrode_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' + prefix +str(int(id[group][trode])) + '.dat'
-                trode_signal = read_amplifier_dat_file(electrode_path)
-                group_file[trode] = signal.decimate(trode_signal, 30)
-            else:
-                #For the OpenEphys files
-                electrode_path = session.dir + '/100_CH' + str(int(id[group][trode]) + 1) + '.continuous'
-                electrode_dict = OpenEphys.load(electrode_path)
-                group_file[trode] = electrode_dict['data']
-
-                #Reading out the data for the "file per recording" option of Intan
     elif experiment.fileformat == 'rhd':
-        group_file = np.zeros((probe.nr_of_electrodes_per_group,0))
-        for sample in range(len(session.rhd_files)):
-            data = read_data(session.dir+'/'+ p['rhd_file'][sample])
-            electrode_inds = []
-            for trode in range(len(probe.id[group])):
-                electrode_inds = np.append(electrode_inds, id[trode,group])
-            electrode_inds = electrode_inds.astype(int)
-            group_file = np.append(group_file, data['amplifier_data'][electrode_inds], 0)
+        #TO DO
+        pass
 
+    return electrode_data
+
+def read_group():
     #Writing the data into the .dat file if spike sorting will be performed.
     #if session.subExperiment.preferences['do_spike_analysis'] == 'y':
     if False:
