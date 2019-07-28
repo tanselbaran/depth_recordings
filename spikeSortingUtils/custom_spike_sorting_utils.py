@@ -3,6 +3,7 @@ from glob import glob
 from utils.filtering import *
 from utils.load_intan_rhd_format import *
 from utils.reading_utils import *
+from scipy import signal
 from tqdm import tqdm
 
 def read_location(location, group):
@@ -48,8 +49,11 @@ def read_location(location, group):
             if reading_index-chunk_size == 0:
                 noise_bound = (int(30*experiment.sample_rate), int(60*experiment.sample_rate))
                 noise = np.sqrt(np.mean(np.square(filtered[:,noise_bound[0]:noise_bound[1]]), 1))
-
-            (waveforms_chunk, peak_times_chunk) = extract_waveforms(filtered, chunk_time, location, noise) #Extracting waveforms and peak times
+            
+            b,a = signal.iirfilter(6, [2*300/experiment.sample_rate, 2*7500/experiment.sample_rate], btype='bandpass')
+            filtered_for_plot = signal.filtfilt(b,a,data,axis=1)
+            
+            (waveforms_chunk, peak_times_chunk) = extract_waveforms(filtered, filtered_for_plot, chunk_time, location, noise) #Extracting waveforms and peak times
             print(str(len(waveforms_chunk)) + ' spikes found in the chunk.' )
 
             if len(waveforms_chunk) > 0:
@@ -64,7 +68,7 @@ def read_location(location, group):
 
     return location_output
 
-def extract_waveforms(data, time, location,noise):
+def extract_waveforms(filtered, raw, time, location,noise):
     """
     This function extracts waveforms from multiple channel data based on the
     given threshold coefficient. A relative threshold is calculated by
@@ -102,13 +106,13 @@ def extract_waveforms(data, time, location,noise):
     peak_times = []
     found = False
 
-    for i in tqdm(range(experiment.spike_samples_before, len(data[0]) - experiment.spike_samples_after)):
-        for trode in range(len(data)):
-            if (abs(data[trode,i]) > threshold[trode]) and (abs(data[trode,i]) > abs(data[trode,i-1])) and (abs(data[trode,i]) > abs(data[trode,i+1])):
+    for i in tqdm(range(experiment.spike_samples_before, len(filtered[0]) - experiment.spike_samples_after)):
+        for trode in range(len(filtered)):
+            if (abs(filtered[trode,i]) > threshold[trode]) and (abs(filtered[trode,i]) > abs(filtered[trode,i-1])) and (abs(filtered[trode,i]) > abs(filtered[trode,i+1]) and (abs(filtered[trode,i]) < 100)):
                 found = True
                 break
         if found:
-            waveform = data[:,(i - experiment.spike_samples_before):(i + experiment.spike_samples_after)]
+            waveform = raw[:,(i - experiment.spike_samples_before):(i + experiment.spike_samples_after)]
             waveforms.append(waveform)
             peak_times.append(time[i])
             found = False
