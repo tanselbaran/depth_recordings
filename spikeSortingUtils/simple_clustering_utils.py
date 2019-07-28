@@ -1,8 +1,9 @@
 from matplotlib.mlab import PCA
 from sklearn.cluster import KMeans
-from surfaceRecUtils.surface_rec_notebook_utils import *
+from utils.notebook_utils import *
+from utils.experiment_classes import *
 
-def PCA_on_waveforms(waveforms, minfrac, params):
+def PCA_on_waveforms(waveforms, minfrac, location):
 	"""
 	This function performs principal component analysis on the spike waveforms extracted and returns the
 	projection of the waveforms on these principal component axes.
@@ -27,10 +28,10 @@ def PCA_on_waveforms(waveforms, minfrac, params):
 	waveforms_true = waveforms_true.reshape(len(peaks),n_dimensions) #Reshaping the array with respect to initial number of dimensions
 	results = PCA(waveforms_true)"""
 
-	n_dimensions = len(waveforms[0]) * len(params['spike_timerange'])
+	experiment = location.experiment
+	n_dimensions = len(waveforms[0]) * (experiment.spike_samples_before + experiment.spike_samples_after)
 	waveforms = waveforms.reshape(len(waveforms), n_dimensions)
 	results = PCA(waveforms)
-	#projection = results.project(waveforms_true, minfrac)
 	projection = results.project(waveforms, minfrac)
 	return projection
 
@@ -51,19 +52,19 @@ def kmeans_clusters(num_clusters, projection):
 
 	return clusters
 
-def PCA_and_cluster(waveforms, params, minfrac, num_clusters):
-	projection = PCA_on_waveforms(waveforms, 0.01, params)
+def PCA_and_cluster(waveforms, location, minfrac, num_clusters):
+	projection = PCA_on_waveforms(waveforms, minfrac, location)
 	clusters = kmeans_clusters(num_clusters, projection)
 	#plot_3d_of_clusters(clusters, projection, params)
 
 	return clusters, projection
 
-def recluster(waveforms, params, peak_times, minfrac, num_clusters, old_clusters, good_cluster_indices):
+def recluster(waveforms, location, peak_times, minfrac, num_clusters, old_clusters, good_cluster_indices):
 
 	good_waveform_inds = []
 	for good_cluster in good_cluster_indices:
 		good_waveform_inds.extend(np.where(old_clusters.labels_ == good_cluster)[0])
 	good_waveforms = waveforms[good_waveform_inds,:,:]
-	(good_clusters, good_projection) = PCA_and_cluster(good_waveforms, params, minfrac, num_clusters)
+	(good_clusters, good_projection) = PCA_and_cluster(good_waveforms, location, minfrac, num_clusters)
 	good_peaktimes = peak_times[good_waveform_inds]
 	return good_clusters, good_waveforms, good_peaktimes, good_projection
