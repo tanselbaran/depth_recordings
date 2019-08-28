@@ -21,7 +21,7 @@ def initialize_spike_sorting_notebook_for_group(location_index, location, group)
 
     import_header = """## Importing necessary packages and initializing objects"""
     import_code = """import os
-os.chdir('/home/baran/Desktop/git-repos/surface_recording_project')
+os.chdir('/home/baran/Desktop/github/surface_recording_project')
 
 from spikeSortingUtils.custom_spike_sorting_utils import *
 import numpy as np
@@ -120,7 +120,7 @@ def get_unit_spike_times_and_trains(unit_indices, time, peak_times, location):
 
     for unit in range(len(unit_indices)):
         spike_times_ind = peak_times[unit_indices[unit]]
-        spike_times_ind = np.asarray(spike_times_ind * location.experiment.sample_rate)
+        spike_times_ind = np.asarray(spike_times_ind)
         spike_times_ind = spike_times_ind.astype(int)
         spike_times[unit] = np.sort(spike_times_ind)
         spike_trains[unit][spike_times_ind] = 1
@@ -149,7 +149,7 @@ def plot_waveforms(index, waveforms, plot_params, location):
     fig, axs = subplots(plot_params['nrow'], plot_params['ncol'])
     channel = 0
     experiment=location.experiment
-    spike_timerange = np.arange(-experiment.spike_samples_before, experiment.spike_samples_after, 1) / experiment.sample_rate
+    spike_timerange = np.arange(-experiment.spike_samples_before, experiment.spike_samples_after, 1) / (experiment.sample_rate/1000)
     for i, ax in enumerate(fig.axes):
         ax.plot(spike_timerange, waveforms[index, channel])
         ax.set_ylim(plot_params['ylim'])
@@ -177,7 +177,7 @@ def plot_mean_cluster_waveforms(cluster, clusters, waveforms, plot_params, locat
         mode: Plot the mean waveform with or without the individual waveforms ('ind_on' for displaying the individual waveforms, 'ind_off' for not displaying them)
     """
     experiment=location.experiment
-    spike_timerange = np.arange(-experiment.spike_samples_before, experiment.spike_samples_after, 1) / experiment.sample_rate
+    spike_timerange = np.arange(-experiment.spike_samples_before, experiment.spike_samples_after, 1) / (experiment.sample_rate/1000)
 
     #Selecting the spike waveforms that belong to the selected cluster and calculating the mean waveform at each electrode
     spikes_in_cluster = waveforms[np.where(clusters.labels_ == cluster)]
