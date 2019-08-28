@@ -53,7 +53,9 @@ def kmeans_clusters(num_clusters, projection):
 	return clusters
 
 def PCA_and_cluster(waveforms, location, minfrac, num_clusters):
+	print('Performing PCA on waveforms')
 	projection = PCA_on_waveforms(waveforms, minfrac, location)
+	print('Clustering waveforms')
 	clusters = kmeans_clusters(num_clusters, projection)
 	#plot_3d_of_clusters(clusters, projection, params)
 

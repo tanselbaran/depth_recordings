@@ -54,7 +54,7 @@ class Session:
             self.optical_stim_channel = self.dir + '/' + prefix + str(args[1]) + '.dat'
         #if self.preferences['do_electrical_stim_evoked'] == 'y':
             #TO BE FILLED
-            
+
 
     def createProbe(self, probe_name):
         probe_module = importlib.import_module('probe_files.'+probe_name)
@@ -90,6 +90,7 @@ class acute(Experiment):
         self.dir = experiment_dir
         self.name = self.dir.split('/')[-1]
         self.locations = {}
+        self.type = 'acute'
 
     def add_location(self, location_dir):
         index_location = len(self.locations)
@@ -114,7 +115,7 @@ class subExperiment:
         self.sessions[index_session].order = order
 
     def add_sessions_in_dir(self):
-        subdirs = sorted(glob(self.dir + "/*"))
+        subdirs = sorted(glob(self.dir + "/*[!analysis]"))
         for subdir in subdirs:
             current_session = 1
             session_name = subdir.split('/')[-1]
@@ -134,11 +135,17 @@ class chronic(Experiment):
         self.dir = experiment_dir
         self.name = self.dir.split('/')[-1]
         self.days = {}
+        self.type = 'chronic'
 
     def add_day(self, day_dir):
         index_day = len(self.days)
         self.days[index_day] = Day(day_dir, self)
+        print(day_dir)
         self.days[index_day].amplifier_port = input('Please enter the amplifier port to which the amplifier is connected to')
+        self.days[index_day].skip = input('Skip analyzing this day (y/n)')
+        preferences = {}
+        preferences['do_spike_analysis'] = self.get_input_for_pref("Do spike detection, sorting and post-processing for this session? (y/n)")
+        self.days[index_day].preferences = preferences
 
 class Location(subExperiment):
     pass

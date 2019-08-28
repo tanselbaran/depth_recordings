@@ -108,8 +108,15 @@ def analyze_evoked_LFP(evoked, session, group, mode, grp):
     time = np.linspace(-evoked_pre*1000, evoked_post*1000, (evoked_post + evoked_pre) * ds_sample_rate)
     if not os.path.exists(session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name):
         os.mkdir(session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name)
-    evoked_svg_path = session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name
-
+    if experiment.probe.nr_of_electrodes_per_group == 1:
+        if not os.path.exists(session.subExperiment.dir + '/analysis_files/' + session.name):
+            os.mkdir(session.subExperiment.dir + '/analysis_files/' + session.name)
+        evoked_svg_path = session.subExperiment.dir + '/analysis_files/' + session.name
+    else:
+        if not os.path.exists(session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name):
+            os.mkdir(session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name)
+        evoked_svg_path = session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name
+        
     evoked_avg = np.mean(evoked,1) #Average evoked LFP waveforms across trials
     evoked_std = np.std(evoked, 1) #Standard deviation of the evoked LFP waveforms across trials
     evoked_err = evoked_std / math.sqrt(len(evoked)) #Standard error of the evoked LFP waveforms across trials

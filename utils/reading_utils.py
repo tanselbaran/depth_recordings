@@ -113,7 +113,11 @@ def read_channel(session, group, trode, chunk_inds):
             prefix = '0'
         electrode_path = session.dir + '/amp-' + session.subExperiment.amplifier_port + '-' +prefix + str(int(electrode_index)) + '.dat'
         electrode_data = read_amplifier_dat_file(electrode_path)
-        electrode_data = electrode_data[chunk_inds[0]:chunk_inds[1]]
+        
+        if chunk_inds[1] == -1:
+            electrode_data = electrode_data[chunk_inds[0]:]
+        else:
+            electrode_data = electrode_data[chunk_inds[0]:chunk_inds[1]]
 
     elif experiment.fileformat =='cont':
         #For the OpenEphys files
