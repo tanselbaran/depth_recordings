@@ -55,7 +55,7 @@ class Session:
         self.probe = probe_class()
         self.probe.get_channel_mapping(self.amplifier)
         self.probe.get_channel_coords()
-    
+
 class acute(Experiment):
 
     def __init__(self, experiment_dir):
@@ -129,9 +129,3 @@ class Probe:
     def __init__(self, probe_name):
         self.name = probe_name
         self.probe_module = importlib.import_module('probe_files.'+probe_name)
-
-    def remove_dead_channels(self, dead_channels):
-        for group in range(len(self.id)):
-            dead_channels_in_group = np.in1d(self.id[group], dead_channels)
-            self.id[group] = np.delete(self.id[group], np.where(dead_channels_in_group == True)[0])
-            self.coords[group] = np.delete(self.coords[group], np.where(dead_channels_in_group == True)[0])
