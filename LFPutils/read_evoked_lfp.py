@@ -53,15 +53,9 @@ def read_evoked_lfp(group, session):
     f = h5py.File(experiment.dir + '/analysis_results.hdf5', 'a')
     ds_sample_rate = experiment.sample_rate/experiment.downsampling_factor
 
-    if session.preferences['do_whisker_stim_evoked'] == 'y':
-        whisker_stim = True
-    else:
-        whisker_stim = False
-
-    if whisker_stim:
-        whisker_stim_timestamps = f[session.subExperiment.name + '/' + session.name +  '/whisker_stim_timestamps']
-        whisker_stim_grp = f[session.subExperiment.name + '/' + session.name + '/group_{:g}'.format(group)].create_group("whisker_evoked_LFP")
-        whisker_evoked = np.zeros((nr_of_electrodes, len(whisker_stim_timestamps),  int(ds_sample_rate*(experiment.whisker_evoked_pre+experiment.whisker_evoked_post))))
+    whisker_stim_timestamps = f[session.subExperiment.name + '/' + session.name +  '/whisker_stim_timestamps']
+    whisker_stim_grp = f[session.subExperiment.name + '/' + session.name + '/group_{:g}'.format(group)].create_group("whisker_evoked_LFP")
+    whisker_evoked = np.zeros((nr_of_electrodes, len(whisker_stim_timestamps),  int(ds_sample_rate*(experiment.whisker_evoked_pre+experiment.whisker_evoked_post))))
 
     for trode in range(nr_of_electrodes):
         electrode_data = read_channel(session, group, trode, [0,-1])
@@ -72,16 +66,9 @@ def read_evoked_lfp(group, session):
         filt = lowpassFilter(rate = ds_sample_rate, high = experiment.low_pass_freq, order = experiment.low_pass_order, axis = 0)
         filtered = filt(electrode_data)
 
-        #Notch filtering
-        if experiment.notch_filt_freq != 0:
-            notchFilt = notchFilter(rate = ds_sample_rate, low = experiment.notch_filt_freq-5, high = experiment.notch_filt_freq+5, order = 4, axis = 0)
-            filtered = notchFilt(filtered)
+        whisker_evoked[trode] = read_evoked_lfp_from_stim_timestamps(filtered, whisker_stim_timestamps, experiment, 'whisker')
 
-        if whisker_stim:
-            whisker_evoked[trode] = read_evoked_lfp_from_stim_timestamps(filtered, whisker_stim_timestamps, experiment, 'whisker')
-
-    if whisker_stim:
-        analyze_evoked_LFP(whisker_evoked, session, group, 'whisker', whisker_stim_grp)
+    analyze_evoked_LFP(whisker_evoked, session, group, 'whisker', whisker_stim_grp)
 
 def analyze_evoked_LFP(evoked, session, group, mode, grp):
     experiment = session.subExperiment.experiment
@@ -90,17 +77,13 @@ def analyze_evoked_LFP(evoked, session, group, mode, grp):
     evoked_post = getattr(experiment, "{:s}_evoked_post".format(mode))
 
     time = np.linspace(-evoked_pre*1000, evoked_post*1000, (evoked_post + evoked_pre) * ds_sample_rate)
-    if not os.path.exists(session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name):
-        os.mkdir(session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name)
+    if not os.path.exists(experiment.dir + '/analysis_files/' + session.subExperiment.name + '/'+ session.name + '/evoked_LFP_analysis/group_{:g}/'.format(group)):
+        os.mkdir(experiment.dir + '/analysis_files/' + session.subExperiment.name + '/'+ session.name + '/evoked_LFP_analysis/group_{:g}/'.format(group))
     if experiment.probe.nr_of_electrodes_per_group == 1:
-        if not os.path.exists(session.subExperiment.dir + '/analysis_files/' + session.name):
-            os.mkdir(session.subExperiment.dir + '/analysis_files/' + session.name)
-        evoked_svg_path = session.subExperiment.dir + '/analysis_files/' + session.name
+        evoked_svg_path = experiment.dir + '/analysis_files/' + session.subExperiment.name + '/'+ session.name + '/evoked_LFP_analysis'
     else:
-        if not os.path.exists(session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name):
-            os.mkdir(session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name)
-        evoked_svg_path = session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name
-        
+        evoked_svg_path = session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group)
+
     evoked_avg = np.mean(evoked,1) #Average evoked LFP waveforms across trials
     evoked_std = np.std(evoked, 1) #Standard deviation of the evoked LFP waveforms across trials
     evoked_err = evoked_std / math.sqrt(len(evoked)) #Standard error of the evoked LFP waveforms across trials

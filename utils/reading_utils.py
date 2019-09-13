@@ -74,15 +74,6 @@ def read_stimulus_trigger(session):
             stim_timestamps['whisker_stim_timestamps'] = whisker_stim_timestamps
             f[session.subExperiment.name + '/' + session.name].create_dataset("whisker_stim_timestamps", data = whisker_stim_timestamps)
 
-        if session.preferences['do_optical_stim_evoked'] == 'y':
-            optical_trigger_filepath = session.optical_stim_channel
-            with open(optical_trigger_filepath, 'rb') as fid:
-                optical_stim_trigger = np.fromfile(fid, np.int16)
-            optical_stim_timestamps = (extract_stim_timestamps_der(optical_stim_trigger, experiment)/ experiment.downsampling_factor)
-            optical_stim_timestamps = optical_stim_timestamps.astype('int')
-            stim_timestamps['optical_stim_timestamps'] = optical_stim_timestamps
-            f[session.subExperiment.name + '/' + session.name].create_dataset("optical_stim_timestamps", data  = optical_stim_timestamps)
-
     return stim_timestamps
 
 def read_channel(session, group, trode, chunk_inds):

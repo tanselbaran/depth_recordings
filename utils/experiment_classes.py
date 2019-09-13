@@ -1,8 +1,35 @@
 from glob import glob
-import importlib
+import os
 import numpy as np
+from importlib import import_module
 
 class Experiment:
+    def __init__(self, experiment_dir, type):
+        self.dir = experiment_dir
+        self.name = self.dir.split('/')[-1]
+        self.locations = {}
+        self.type = type
+
+    def add_subExperiment(self, subExperiment_dir):
+        index_subExperiment = len(self.subExperiments)
+        self.subExperiments[index_subExperiment] = subExperiment(subExperiment_dir, self)
+        print(subExperiment_dir)
+        self.subExperiment[index_subExperiment].amplifier_port = input('Please enter the amplifier port to which the amplifier is connected to')
+        preferences = {}
+        preferences['do_spike_analysis'] = self.get_input_for_pref("Do spike detection, sorting and post-processing for this session? (y/n)")
+        self.subExperiments[index_subExperiment].preferences = preferences
+
+    def createProbe(self, probe_file_dir, probe_name):
+        cwd = os.getcwd()
+        os.chdir(probe_file_dir)
+        probe_module = import_module(probe_name)
+        probe_class = getattr(probe_module, probe_name)
+        os.chdir(cwd)
+
+        self.probe = probe_class()
+        self.probe.get_channel_mapping(self.amplifier)
+        self.probe.get_channel_coords()
+
     def get_input_for_pref(self,statement):
         while True:
             inpt = input(statement)
@@ -48,34 +75,20 @@ class Session:
         if self.preferences['do_whisker_stim_evoked'] == 'y':
             self.whisker_stim_channel = self.dir + '/' + prefix + str(args[0]) + '.dat'
 
-    def createProbe(self, probe_name):
-        probe_module = importlib.import_module('probe_files.'+probe_name)
+    def createProbe(self, amplifier, probe_file_dir, probe_name):
+        cwd = os.getcwd()
+        os.chdir(probe_file_dir)
+        probe_module = import_module(probe_name)
         probe_class = getattr(probe_module, probe_name)
+        os.chdir(cwd)
 
         self.probe = probe_class()
-        self.probe.get_channel_mapping(self.amplifier)
+        self.probe.get_channel_mapping(amplifier)
         self.probe.get_channel_coords()
 
-class acute(Experiment):
-
-    def __init__(self, experiment_dir):
-        self.dir = experiment_dir
-        self.name = self.dir.split('/')[-1]
-        self.locations = {}
-        self.type = 'acute'
-
-    def add_location(self, location_dir):
-        index_location = len(self.locations)
-        self.locations[index_location] = Location(location_dir, self)
-        print(location_dir)
-        self.locations[index_location].amplifier_port = input('Please enter the amplifier port to which the amplifier is connected to')
-        preferences = {}
-        preferences['do_spike_analysis'] = self.get_input_for_pref("Do spike detection, sorting and post-processing for this session? (y/n)")
-        self.locations[index_location].preferences = preferences
-
 class subExperiment:
-    def __init__(self, location_dir, experiment):
-        self.dir = location_dir
+    def __init__(self, subExperiment_dir, experiment):
+        self.dir = subExperiment_dir
         self.name = self.dir.split('/')[-1]
         self.sessions = {}
         self.experiment = experiment
@@ -101,29 +114,6 @@ class subExperiment:
                 order = 1
             self.add_session(session_name, order)
             current_session = current_session + 1
-
-class chronic(Experiment):
-    def __init__(self, experiment_dir):
-        self.dir = experiment_dir
-        self.name = self.dir.split('/')[-1]
-        self.days = {}
-        self.type = 'chronic'
-
-    def add_day(self, day_dir):
-        index_day = len(self.days)
-        self.days[index_day] = Day(day_dir, self)
-        print(day_dir)
-        self.days[index_day].amplifier_port = input('Please enter the amplifier port to which the amplifier is connected to')
-        self.days[index_day].skip = input('Skip analyzing this day (y/n)')
-        preferences = {}
-        preferences['do_spike_analysis'] = self.get_input_for_pref("Do spike detection, sorting and post-processing for this session? (y/n)")
-        self.days[index_day].preferences = preferences
-
-class Location(subExperiment):
-    pass
-
-class Day(subExperiment):
-    pass
 
 class Probe:
     def __init__(self, probe_name):
