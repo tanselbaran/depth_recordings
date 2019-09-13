@@ -84,14 +84,6 @@ def read_stimulus_trigger(session):
             stim_timestamps['optical_stim_timestamps'] = optical_stim_timestamps
             f[session.subExperiment.name + '/' + session.name].create_dataset("optical_stim_timestamps", data  = optical_stim_timestamps)
 
-    elif experiment.fileformat == 'cont':
-        #TO DO
-        pass
-
-    elif experiment.fileformat == 'rhd':
-        #TO DO
-        pass
-
     return stim_timestamps
 
 def read_channel(session, group, trode, chunk_inds):
@@ -118,16 +110,6 @@ def read_channel(session, group, trode, chunk_inds):
             electrode_data = electrode_data[chunk_inds[0]:]
         else:
             electrode_data = electrode_data[chunk_inds[0]:chunk_inds[1]]
-
-    elif experiment.fileformat =='cont':
-        #For the OpenEphys files
-        electrode_path = session.dir+ '/100_CH' + str(int(electrode_index) + 1) + '.continuous'
-        electrode_dict = OpenEphys.load(electrode_path)
-        electrode_data = electrode_dict['data']
-
-    elif experiment.fileformat == 'rhd':
-        #TO DO
-        pass
 
     return electrode_data
 
