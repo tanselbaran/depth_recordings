@@ -42,44 +42,6 @@ def create_prm_file(group,location):
 
     text.close()
 
-def create_prb_file(group,location):
-    """
-    This function creates the .prb file required by Klustakwik, which contains the electrode neighborhood and geometry information for the tetrode or shank of a linear probe with the group index s.
-
-    Inputs:
-        probe: Index of the probe, for recordings with multiple probes.
-        s: Group index; shanks in the case of linear probes (0 for the left-most shank, looking at the electrode side), tetrodes in the case of tetrode organization (starting from the left and bottom-most tetrode first and increasing upwards column by column)
-        p: Parameters dictionary containing the parameters and preferences related to spike sorting.
-    """
-
-    experiment = location.experiment
-    probe = experiment.probe
-    file_dir = location.dir + '/analysis_files/group_{:g}/group_{:g}.prb'.format(group,group)
-
-    if probe.type == 'tetrode':
-        tetrode = dict(channels = list(range(probe.nr_of_electrodes_per_group)), graph = list(combinations(range(probe.nr_of_electrodes_per_group),2)), geometry = {0: (0, 90), 1: (0, 60), 2: (0, 30), 3: (0, 0)})
-        channel_groups = {0: tetrode}
-        with open(file_dir, 'a') as text:
-            print('channel_groups = {}'.format(channel_groups), file = text)
-    elif probe.type == 'linear':
-        copyfile('./prb_files/' + probe.name + '.prb', file_dir) #for the linear probes, just copy the probe file downloaded from the repository for the Neuronexus probe files
-    elif probe.type == 'array':
-        pass
-
-def do_klusta(group,location):
-    """
-    This function runs the klustakwik for the tetrode or the shank of a linear probe.
-
-    Inputs:
-        probe: Index of the probe, for recordings with multiple probes.
-        s: Group index; shanks in the case of linear probes (0 for the left-most shank, looking at the electrode side), tetrodes in the case of tetrode organization (starting from the left and bottom-most tetrode first and increasing upwards column by column)
-        p: Parameters dictionary containing the parameters and preferences related to spike sorting.
-    """
-
-    file_dir = location.dir+ '/analysis_files/group_{:g}/'.format(group)
-    os.chdir(file_dir)
-    os.system('klusta group_{:g}.prm'.format(group))
-
 #For post-processing of the spikes and clusters determined by Klustakwik
 def retain_cluster_info(probe,group,p):
     """
