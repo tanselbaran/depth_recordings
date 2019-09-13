@@ -12,7 +12,6 @@ from utils.filtering import *
 from utils.reading_utils import *
 from utils.load_intan_rhd_format import *
 from matplotlib.pyplot import *
-from utils.OpenEphys import *
 from tqdm import tqdm
 import pickle
 import h5py
@@ -58,20 +57,11 @@ def read_evoked_lfp(group, session):
         whisker_stim = True
     else:
         whisker_stim = False
-    if session.preferences['do_optical_stim_evoked'] == 'y':
-        optical_stim = True
-    else:
-        optical_stim = False
 
     if whisker_stim:
         whisker_stim_timestamps = f[session.subExperiment.name + '/' + session.name +  '/whisker_stim_timestamps']
         whisker_stim_grp = f[session.subExperiment.name + '/' + session.name + '/group_{:g}'.format(group)].create_group("whisker_evoked_LFP")
         whisker_evoked = np.zeros((nr_of_electrodes, len(whisker_stim_timestamps),  int(ds_sample_rate*(experiment.whisker_evoked_pre+experiment.whisker_evoked_post))))
-
-    if optical_stim:
-        optical_stim_timestamps = f[session.subExperiment.name + '/' + session.name +  '/optical_stim_timestamps']
-        optical_stim_grp = f[session.subExperiment.name + '/' + session.name + '/group_{:g}'.format(group)].create_group("optical_evoked_LFP")
-        optical_evoked = np.zeros((nr_of_electrodes, len(optical_stim_timestamps),  int(ds_sample_rate*(experiment.optical_evoked_pre+experiment.optical_evoked_post))))
 
     for trode in range(nr_of_electrodes):
         electrode_data = read_channel(session, group, trode, [0,-1])
@@ -90,20 +80,14 @@ def read_evoked_lfp(group, session):
         if whisker_stim:
             whisker_evoked[trode] = read_evoked_lfp_from_stim_timestamps(filtered, whisker_stim_timestamps, experiment, 'whisker')
 
-        if optical_stim:
-            optical_evoked[trode] = read_evoked_lfp_from_stim_timestamps(filtered, optical_stim_timestamps, experiment, 'optical')
-
     if whisker_stim:
         analyze_evoked_LFP(whisker_evoked, session, group, 'whisker', whisker_stim_grp)
-    if optical_stim:
-        analyze_evoked_LFP(optical_evoked, session, group, 'optical', optical_stim_grp)
 
 def analyze_evoked_LFP(evoked, session, group, mode, grp):
     experiment = session.subExperiment.experiment
     ds_sample_rate = experiment.sample_rate/experiment.downsampling_factor
     evoked_pre = getattr(experiment, "{:s}_evoked_pre".format(mode))
     evoked_post = getattr(experiment, "{:s}_evoked_post".format(mode))
-
 
     time = np.linspace(-evoked_pre*1000, evoked_post*1000, (evoked_post + evoked_pre) * ds_sample_rate)
     if not os.path.exists(session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group) + session.name):
