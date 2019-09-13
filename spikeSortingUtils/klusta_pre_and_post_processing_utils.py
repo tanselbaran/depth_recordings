@@ -9,11 +9,9 @@ Contains the functions that are used for creating the .prm and .prb files requir
 import numpy as np
 import os as os
 import h5py
-from itertools import combinations
 import json
 import pickle
 from scipy import signal
-from shutil import copyfile
 from utils.filtering import *
 
 ### Klustakwik utilities for data analyzing ###
