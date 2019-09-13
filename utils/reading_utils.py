@@ -103,16 +103,32 @@ def read_channel(session, group, trode, chunk_inds):
 
     return electrode_data
 
-def read_group():
+def return_ch_idx(ch_number):
+    if ch_number < 10:
+        ch_idx = '00{:g}'.format(ch_number)
+    else:
+        ch_idx = '0{:g}'.format(ch_number)
+    return ch_idx
+
+def read_group_into_dat_file(session, group, spike_sorting_analysis_files_dir):
     #Writing the data into the .dat file if spike sorting will be performed.
     #if session.subExperiment.preferences['do_spike_analysis'] == 'y':
-    if False:
-        if session.order == 0:
-            fid_write = open(session.subExperiment.dir +'/analysis_files/group_{:g}/group_{:g}.dat'.format(group, group), 'w')
-        else:
-            fid_write = open(session.subExperiment.dir +'/analysis_files/group_{:g}/group_{:g}.dat'.format(group, group), 'a')
-        group_file_to_save = group_file.transpose().round().astype('int16')
-        group_file_to_save.tofile(fid_write)
-        fid_write.close()
+    experiment = session.subExperiment.experiment
+    probe_id = experiment.probe.id
+    channels = np.asarray(list(id.values()))
+    channels = np.transpose(channels)[0]
 
-    return group_file
+    time = read_time_dat_file(session.dir + '/time.dat', experiment.sample_rate)
+    reference = np.zeros((len(session.ref_channels), len(time)))
+    for i, ref_channel in enumerate(session.ref_channels):
+        ch_idx = return_ch_idx(ref_channel)
+        reference[i] = read_amplifier_dat_file(session.dir + '/amp-A-{:}.dat'.format(ch_idx))
+    mean_reference = np.mean(reference, 0)
+
+    data_all = np.memmap(spike_sorting_analysis_files_dir + 'group_{:g}/group_{:g}.dat'.format(group,group),dtype='int16', mode='w+', shape=(len(channels),len(time)))
+    for i,ch in enumerate(channels):
+        ch_idx = return_ch_idx(ch)
+        raw_data = read_amplifier_dat_file(main_folder + '/amp-A-{:}.dat'.format(ch_idx))
+        refd_data = raw_data - mean_reference
+        data_all[i] = refd_data
+    data_all = data_all.flatten('F')

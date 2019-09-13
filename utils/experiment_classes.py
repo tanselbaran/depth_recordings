@@ -59,6 +59,9 @@ class Session:
         preferences = {}
         print(self.name)
         preferences['do_whisker_stim_evoked'] = self.get_input_for_pref("Do whisker stimulation evoked analysis for this session? (y/n)")
+        ref_channels = self.get_input_for_pref("Which channels will be used for software referencing to detect spikes?")
+        ref_channels = np.asarray(ref_channels.split(','))
+        preferences['ref_channels'] = ref_channels.astype('int8')
         self.preferences = preferences
 
     def set_amplifier(self):
