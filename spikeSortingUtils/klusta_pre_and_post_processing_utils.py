@@ -16,7 +16,7 @@ from utils.filtering import *
 
 ### Klustakwik utilities for data analyzing ###
 
-def create_prm_file(group,subExperiment):
+def create_prm_file(group,session):
     """
     This function creates the .prm file required by Klustakwik for the analysis of the data from the tetrode or shank of a linear probe with the group index s.
 
@@ -25,18 +25,18 @@ def create_prm_file(group,subExperiment):
         s: Group index; shanks in the case of linear probes (0 for the left-most shank, looking at the electrode side), tetrodes in the case of tetrode organization (starting from the left and bottom-most tetrode first and increasing upwards column by column)
         p: Parameters dictionary containing the parameters and preferences related to spike sorting.
     """
-    experiment = subExperiment.experiment
+    experiment = session.subExperiment.experiment
     probe = experiment.probe
-    file_dir = subExperiment.dir + '/analysis_files/group_{:g}/group_{:g}.prm'.format(group,group)
+    file_dir = experiment.dir + '/analysis_files/' + session.subExperiment.name + '/' + session.name + '/spike_sorting/group_{:g}/group_{:g}.prm'.format(group,group)
 
     with open(file_dir, 'a') as text:
-        print('experiment_name = \group_{:g}\''.format(group), file = text)
+        print('experiment_name = \'group_{:g}\''.format(group), file = text)
         print('prb_file = \'group_{:g}.prb\''.format(group), file = text)
-        print('traces = dict(raw_data_files=[experiment_name + \'.dat\'],voltage_gain=10., sample_rate =' + str(experiment.sample_rate) + ', n_channels = ' + str(probe.nr_of_electrodes_per_group) + ', dtype = \'int16\')', file = text)
+        print('traces = dict(raw_data_files=[\'group_{:g}.dat\'], sample_rate ='.format(group) + str(experiment.sample_rate) + ', n_channels = ' + str(probe.nr_of_electrodes_per_group) + ', dtype = \'int16\')', file = text)
 
-        print("spikedetekt = { \n 'filter_low' : %d., \n 'filter_high_factor': 0.95 * .5, \n 'filter_butter_order': {:}, \n #Data chunks. \n 'chunk_size_seconds': 1., \n 'chunk_overlap_seconds': .015, \n #Threshold \n 'n_excerpts': 50, \n 'excerpt_size_seconds': 1., \n 'use_single_threshold': True, \n 'threshold_strong_std_factor': {:}, \n 'threshold_weak_std_factor': 2., \n 'detect_spikes': 'negative', \n # Connected components. \n 'connected_component_join_size': 1, \n #Spike extractions. \n 'extract_s_before': {:}, \n 'extract_s_after': {:}, \n 'weight_power': 2, \n #Features. \n 'n_features_per_channel': 3, \n 'pca_n_waveforms_max': 10000}".format(experiment.bandfilter_order, experiment.threshold_coeff, experiment.spike_samples_before, experiment.spike_samples_after) , file = text)
+        print("spikedetekt = { \n 'filter_low' : %d., \n 'filter_high_factor': 0.95 * .5, \n 'filter_butter_order': %i, \n #Data chunks. \n 'chunk_size_seconds': 1., \n 'chunk_overlap_seconds': .015, \n 'n_excerpts': 50, \n 'excerpt_size_seconds': 1., \n 'use_single_threshold': True, \n 'threshold_strong_std_factor': %d, \n 'threshold_weak_std_factor': 2., \n 'detect_spikes': 'negative', \n #Connected components. \n 'connected_component_join_size': 1, \n #Spike extractions. \n 'extract_s_before': %i, \n 'extract_s_after': %i, \n 'weight_power': 2, \n #Features. \n 'n_features_per_channel': 3, \n 'pca_n_waveforms_max':10000}" % (experiment.low_cutoff_bandpass, experiment.bandfilter_order, experiment.threshold_coeff, experiment.spike_samples_before, experiment.spike_samples_after) , file = text)
 
-        print("klustakwik2 = { \n 'prior_point':1, \n 'mua_point':2, \n 'noise_point':1, \n 'points_for_cluster_mask':100, \n 'penalty_k':0.0, \n 'penalty_k_log_n':1.0, \n 'max_iterations':1000, \n 'num_starting_clusters':500, \n 'use_noise_cluster':True, \n 'use_mua_cluster':True, \n 'num_changed_threshold':0.05, \n 'full_step_every':1, \n 'split_first':20, \n 'split_every':40, \n 'max_possible_clusters':1000, \n 'dist_thresh':4, \n 'max_quick_step_candidates':100000000, \n 'max_quick_step_candidates_fraction':0.4, \n 'always_split_bimodal':False, \n 'subset_break_fraction':0.01, \n 'break_fraction':0.0, \n 'fast_split':False, \n 'consider_cluster_deletion':True, \n #'num_cpus':None, \n #'max_split_iterations':None \n}", file = text)
+        print("klustakwik2 = dict( \n prior_point=1, \n mua_point=2, \n noise_point=1, \n  points_for_cluster_mask=100, \n penalty_k=0.0, \n penalty_k_log_n=1.0, \n max_iterations=1000, \n num_starting_clusters=500, \n use_noise_cluster=True, \n use_mua_cluster=True, \n num_changed_threshold=0.05, \n full_step_every=1, \n split_first=20, \n split_every=40, \n max_possible_clusters=1000, \n dist_thresh=4, \n max_quick_step_candidates=100000000, \n max_quick_step_candidates_fraction=0.4, \n  always_split_bimodal=False, \n subset_break_fraction=0.01, \n break_fraction=0.0, \n fast_split=False, \n consider_cluster_deletion=True, \n num_cpus=6)", file = text)
 
     text.close()
 

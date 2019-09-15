@@ -7,14 +7,14 @@ class Experiment:
     def __init__(self, experiment_dir, type):
         self.dir = experiment_dir
         self.name = self.dir.split('/')[-1]
-        self.locations = {}
+        self.subExperiments = {}
         self.type = type
 
     def add_subExperiment(self, subExperiment_dir):
         index_subExperiment = len(self.subExperiments)
         self.subExperiments[index_subExperiment] = subExperiment(subExperiment_dir, self)
         print(subExperiment_dir)
-        self.subExperiment[index_subExperiment].amplifier_port = input('Please enter the amplifier port to which the amplifier is connected to')
+        self.subExperiments[index_subExperiment].amplifier_port = input('Please enter the amplifier port to which the amplifier is connected to')
         preferences = {}
         preferences['do_spike_analysis'] = self.get_input_for_pref("Do spike detection, sorting and post-processing for this session? (y/n)")
         self.subExperiments[index_subExperiment].preferences = preferences
@@ -39,7 +39,6 @@ class Experiment:
                 print("Invalid input! Please enter a valid input (y or n).")
         return inpt
 
-
 class Session:
     def __init__(self, session_name, subExperiment):
         self.name = session_name
@@ -59,9 +58,9 @@ class Session:
         preferences = {}
         print(self.name)
         preferences['do_whisker_stim_evoked'] = self.get_input_for_pref("Do whisker stimulation evoked analysis for this session? (y/n)")
-        ref_channels = self.get_input_for_pref("Which channels will be used for software referencing to detect spikes?")
+        ref_channels = input("Which channels will be used for software referencing to detect spikes?")
         ref_channels = np.asarray(ref_channels.split(','))
-        preferences['ref_channels'] = ref_channels.astype('int8')
+        self.ref_channels = ref_channels.astype('int8')
         self.preferences = preferences
 
     def set_amplifier(self):

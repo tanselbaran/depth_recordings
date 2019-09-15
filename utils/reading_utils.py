@@ -115,8 +115,7 @@ def read_group_into_dat_file(session, group, spike_sorting_analysis_files_dir):
     #if session.subExperiment.preferences['do_spike_analysis'] == 'y':
     experiment = session.subExperiment.experiment
     probe_id = experiment.probe.id
-    channels = np.asarray(list(id.values()))
-    channels = np.transpose(channels)[0]
+    channels = probe_id[group]
 
     time = read_time_dat_file(session.dir + '/time.dat', experiment.sample_rate)
     reference = np.zeros((len(session.ref_channels), len(time)))
@@ -125,10 +124,12 @@ def read_group_into_dat_file(session, group, spike_sorting_analysis_files_dir):
         reference[i] = read_amplifier_dat_file(session.dir + '/amp-A-{:}.dat'.format(ch_idx))
     mean_reference = np.mean(reference, 0)
 
-    data_all = np.memmap(spike_sorting_analysis_files_dir + 'group_{:g}/group_{:g}.dat'.format(group,group),dtype='int16', mode='w+', shape=(len(channels),len(time)))
+    data_all = np.memmap(spike_sorting_analysis_files_dir + '/group_{:g}/group_{:g}_temp.dat'.format(group,group),dtype='int16', mode='w+', shape=(len(channels),len(time)))
     for i,ch in enumerate(channels):
         ch_idx = return_ch_idx(ch)
-        raw_data = read_amplifier_dat_file(main_folder + '/amp-A-{:}.dat'.format(ch_idx))
+        raw_data = read_amplifier_dat_file(session.dir + '/amp-A-{:}.dat'.format(ch_idx))
         refd_data = raw_data - mean_reference
         data_all[i] = refd_data
     data_all = data_all.flatten('F')
+    data_all.tofile(open(spike_sorting_analysis_files_dir + '/group_{:g}/group_{:g}.dat'.format(group, group), 'wb'))
+    os.remove(spike_sorting_analysis_files_dir + '/group_{:g}/group_{:g}_temp.dat'.format(group,group))

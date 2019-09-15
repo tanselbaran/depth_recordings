@@ -80,9 +80,9 @@ def analyze_evoked_LFP(evoked, session, group, mode, grp):
     if not os.path.exists(experiment.dir + '/analysis_files/' + session.subExperiment.name + '/'+ session.name + '/evoked_LFP_analysis/group_{:g}/'.format(group)):
         os.mkdir(experiment.dir + '/analysis_files/' + session.subExperiment.name + '/'+ session.name + '/evoked_LFP_analysis/group_{:g}/'.format(group))
     if experiment.probe.nr_of_electrodes_per_group == 1:
-        evoked_svg_path = experiment.dir + '/analysis_files/' + session.subExperiment.name + '/'+ session.name + '/evoked_LFP_analysis'
+        evoked_svg_path = experiment.dir + '/analysis_files/' + session.subExperiment.name + '/'+ session.name + '/evoked_LFP_analysis/'
     else:
-        evoked_svg_path = session.subExperiment.dir + '/analysis_files/group_{:g}/'.format(group)
+        evoked_svg_path = experiment.dir + '/analysis_files/' + session.subExperiment.name + '/'+ session.name + '/evoked_LFP_analysis/group_{:g}/'.format(group)
 
     evoked_avg = np.mean(evoked,1) #Average evoked LFP waveforms across trials
     evoked_std = np.std(evoked, 1) #Standard deviation of the evoked LFP waveforms across trials
@@ -94,12 +94,12 @@ def analyze_evoked_LFP(evoked, session, group, mode, grp):
     grp.create_dataset("{:s}_evoked_LFP".format(mode), data = evoked)
 
     for trode in range(len(evoked)):
-        trode_index = session.probe.id[group][trode]
+        trode_index = experiment.probe.id[group][trode]
         figure()
         plot(time, evoked_avg[trode], 'k-')
         fill_between(time, evoked_avg[trode]-evoked_err[trode], evoked_avg[trode]+evoked_err[trode])
         xlabel('Time (ms)')
         ylabel('Voltage (uV)')
 
-        savefig(evoked_svg_path + '/electrode{:g}_{:s}_evoked.svg'.format(trode_index,mode), format = 'svg')
+        savefig(evoked_svg_path + 'electrode{:g}_{:s}_evoked.svg'.format(trode_index,mode), format = 'svg')
         close()
