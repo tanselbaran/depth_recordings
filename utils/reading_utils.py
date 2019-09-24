@@ -117,6 +117,9 @@ def read_group_into_dat_file(session, group, spike_sorting_analysis_files_dir):
     probe_id = experiment.probe.id
     channels = probe_id[group]
 
+    for dead_channel in sorted(session.dead_channels, reverse=True):
+        del channels[dead_channel]
+
     time = read_time_dat_file(session.dir + '/time.dat', experiment.sample_rate)
     reference = np.zeros((len(session.ref_channels), len(time)))
     for i, ref_channel in enumerate(session.ref_channels):
