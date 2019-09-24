@@ -41,57 +41,47 @@ def create_prm_file(group,session):
     text.close()
 
 #For post-processing of the spikes and clusters determined by Klustakwik
-def retain_cluster_info(probe,group,p):
-    """
-    This function extracts the spike info from the clu file output of Klustakwik that was run on a tetrode data and saves the spike times and waveforms for  a cluster in a pickle file.
+def get_spike_times_and_waveforms_from_unit(unit_id, major_electrode, data_filtered, sr, spike_time_pre, spike_time_post, cluster_id, spike_idx, align=True):
+    unit_spikes = np.where(cluster_id == unit_id)[0]
+    unit_spike_times = spike_idx[unit_spikes]
+    waveforms = np.zeros((len(unit_spikes), len(data_filtered), int(2*(spike_time_pre+spike_time_post)*sr/1000)))
+    for i, spike_time in enumerate(unit_spike_times):
+        waveforms[i,:,:] = data_filtered[:,int(spike_time-(2*(spike_time_pre)*sr/1000)):int(spike_time+(2*spike_time_post*sr/1000))]
 
-    Inputs:
-        group: index of channel groups (0 for the left-most and bottom-most, increasing upwards first in a shank and rightwards when the shank is complete)
-        p: parameters dictionary for the recording session
+    if align:
+        waveforms, index_correction = align_waveforms_at_peak(major_electrode, waveforms, sr, spike_time_pre, spike_time_post)
+        unit_spike_times = unit_spike_times + index_correction
 
-    Outputs:
-        Saves a pickle file in the same folder as the kwik file. The dictionary contains the following;
-            P: spike info dictionary which consist of C sub-dictionaries where C is the number of clusters. Each sub-dictionary consists of the following:
-                spike_times_cluster: times of the spikes that belong to this cluster
-                waveforms: waveforms of the spikes that belong to this cluster
-            p: Params dictionary from the rest of the pipeline
-    """
+    return waveforms, unit_spike_times
 
-    path_kwik_file = p['mainpath'] + '/analysis_files/probe_{:g}_group_{:g}/probe_{:g}_group_{:g}.kwik'.format(probe,group,probe,group) #path to the kwik file
-    with h5py.File(path_kwik_file,'r') as hf:
-        all_spiketimes = hf.get('channel_groups/0/spikes/time_samples') #accessing the spike times
-        np_all_spiketimes = np.array(all_spiketimes) #converting the spike times to numpy array
+def align_waveforms_at_peak(major_electrode, waveforms, sr, spike_time_pre, spike_time_post):
+    peak_indices = np.zeros(len(waveforms))
+    for i in range(len(waveforms)):
+        peak_indices[i] = np.where(np.abs(waveforms[i,major_electrode,int(spike_time_pre*sr/1000):int((2*spike_time_pre+spike_time_post)*sr/1000)]) == np.max(np.abs(waveforms[i,major_electrode,int(spike_time_pre*sr/1000):int((2*spike_time_pre+spike_time_post)*sr/1000)])))[0][0] + int(spike_time_pre*sr/1000)
 
-    path_clu_file = p['mainpath'] + '/analysis_files/probe_{:g}_group_{:g}/probe_{:g}_group_{:g}.clu.0'.format(probe,group,probe,group) #accessing the file where the clustering information is stored
-    np_clu_original = np.loadtxt(path_clu_file) #reading out the clustering information, which is an array with (number of spikes + 1) entries...
-    nr_of_clusters = int(np_clu_original[0]) #... whose first entry is the number of clusters. As a result, we need to...
-    np_clu = np_clu_original[1:] # ...separate the actual clustering information by excluding the first element.
+    aligned_waveforms = np.zeros((len(waveforms), len(waveforms[0]), int((spike_time_pre+spike_time_post)*sr/1000)))
+    for i,spike_time in enumerate(peak_indices):
+        aligned_waveforms[i,:,:] = waveforms[i,:,int(spike_time-(spike_time_pre*sr/1000)):int(spike_time+(spike_time_post*sr/1000))]
 
-    raw_data = np.fromfile(p['mainpath'] + '/analysis_files/probe_{:g}_group_{:g}/probe_{:g}_group_{:g}.dat'.format(probe,group,probe,group),dtype='int16') #reading out the raw data file
-    num_samples = int(len(raw_data) / p['nr_of_electrodes_per_group'])
-    raw_data = np.reshape(raw_data, (num_samples, p['nr_of_electrodes_per_group']))
-    fil = bandpassFilter(rate=p['sample_rate'], low=p['low_cutoff'], high=p['high_cutoff'], order=3, axis = 0)
-    raw_data_f = fil(raw_data)
-    units = {}
+    index_correction = peak_indices - 2*spike_time_pre*sr/1000
+    return aligned_waveforms, index_correction
 
-    unit_indices = np.unique(np_clu)
-    unit_indices = np.delete(unit_indices, [0,1])
-    for cluster in unit_indices:
-        spike_times_cluster_index = np.where(np_clu == cluster)
-        spike_times_cluster = np_all_spiketimes[spike_times_cluster_index]
-        num_spikes_in_cluster = len(spike_times_cluster)
-        num_samples_per_waveform = p['samples_before'] + p['samples_after']
-        waveforms = np.zeros((num_spikes_in_cluster,p['nr_of_electrodes_per_group'],num_samples_per_waveform))
-        for spike in range(num_spikes_in_cluster):
-            for trode in range(p['nr_of_electrodes_per_group']):
-                for sample in range(num_samples_per_waveform):
-                    waveforms[spike,trode,sample] = raw_data_f[(int(spike_times_cluster[spike])-p['samples_before']+sample), trode]
+def get_all_spike_info(units, session, analysis_file_dir):
+    experiment = session.subExperiment.experiment
+    spike_sorting_folder = experiment.dir + '/analysis_files/' + session.subExperiment.name + '/' + session.name + '/spike_sorting/group_0/'
+    kwik_file = h5py.File(spike_sorting_folder + 'group_0.kwik', 'r')
+    cluster_id = np.asarray(kwik_file['channel_groups/0/spikes/clusters/main'])
+    spike_idx = np.asarray(kwik_file['channel_groups/0/spikes/time_samples'])
 
-        unit = [0,0]
-        unit[0] = spike_times_cluster
-        unit[1] = waveforms
-        units['unit{:g}'.format(cluster)] = unit
+    data = np.fromfile(spike_sorting_folder + '/group_0.dat', dtype = 'int16')
+    data = np.reshape(data, (experiment.probe.nr_of_electrodes, int(len(data)/experiment.probe.nr_of_electrodes)), 'F')
 
-    path_pickle_file = p['mainpath'] + '/analysis_files/probe_{:g}_group_{:g}/probe_{:g}_group_{:g}_spikeinfo.pickle'.format(probe,group,probe,group)
-    with open (path_pickle_file, 'wb') as f:
-        pickle.dump({'units':units, 'params_dict':p} ,f)
+    b,a = signal.iirfilter(4, [600/experiment.sample_rate, 6000/experiment.sample_rate], btype='bandpass')
+    data_filtered = signal.filtfilt(b,a, data, axis=1)
+
+    analysis_file = h5py.File(analysis_file_dir, 'r+')
+    for unit in range(len(units)):
+        unit_grp = analysis_file[session.subExperiment.name + '/' + session.name + '/group_0/'].create_group(str(units[unit][0]))
+        waveforms, spike_times = get_spike_times_and_waveforms_from_unit(units[unit][0],units[unit][1],data_filtered,experiment.sample_rate,(1000*experiment.spike_samples_before/experiment.sample_rate),(1000*experiment.spike_samples_after/experiment.sample_rate), cluster_id, spike_idx)
+        unit_grp.create_dataset("waveforms", data=waveforms)
+        unit_grp.create_dataset("spike_times", data=spike_times)
