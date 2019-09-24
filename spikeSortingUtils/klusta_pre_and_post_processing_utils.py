@@ -13,6 +13,7 @@ import json
 import pickle
 from scipy import signal
 from utils.filtering import *
+import itertools
 
 ### Klustakwik utilities for data analyzing ###
 
@@ -37,6 +38,38 @@ def create_prm_file(group,session):
         print("spikedetekt = { \n 'filter_low' : %d., \n 'filter_high_factor': 0.95 * .5, \n 'filter_butter_order': %i, \n #Data chunks. \n 'chunk_size_seconds': 1., \n 'chunk_overlap_seconds': .015, \n 'n_excerpts': 50, \n 'excerpt_size_seconds': 1., \n 'use_single_threshold': True, \n 'threshold_strong_std_factor': %d, \n 'threshold_weak_std_factor': 2., \n 'detect_spikes': 'negative', \n #Connected components. \n 'connected_component_join_size': 1, \n #Spike extractions. \n 'extract_s_before': %i, \n 'extract_s_after': %i, \n 'weight_power': 2, \n #Features. \n 'n_features_per_channel': 3, \n 'pca_n_waveforms_max':10000}" % (experiment.low_cutoff_bandpass, experiment.bandfilter_order, experiment.threshold_coeff, experiment.spike_samples_before, experiment.spike_samples_after) , file = text)
 
         print("klustakwik2 = dict( \n prior_point=1, \n mua_point=2, \n noise_point=1, \n  points_for_cluster_mask=100, \n penalty_k=0.0, \n penalty_k_log_n=1.0, \n max_iterations=1000, \n num_starting_clusters=500, \n use_noise_cluster=True, \n use_mua_cluster=True, \n num_changed_threshold=0.05, \n full_step_every=1, \n split_first=20, \n split_every=40, \n max_possible_clusters=1000, \n dist_thresh=4, \n max_quick_step_candidates=100000000, \n max_quick_step_candidates_fraction=0.4, \n  always_split_bimodal=False, \n subset_break_fraction=0.01, \n break_fraction=0.0, \n fast_split=False, \n consider_cluster_deletion=True, \n num_cpus=6)", file = text)
+
+    text.close()
+
+def create_linear_prb_file(group, session, neighboorhood=3):
+    experiment = session.subExperiment.experiment
+    probe = experiment.probe
+    file_dir = experiment.dir + '/analysis_files/' + session.subExperiment.name + '/' + session.name + '/spike_sorting/group_{:g}/group_{:g}.prb'.format(group,group)
+
+    channels = list(range(probe.nr_of_electrodes_per_group))
+    for channel in session.dead_channels:
+        channels.remove(channel)
+
+    adjacency = []
+    for i in channels:
+        if (i + neighborhood) < probe.nr_of_electrodes_per_group:
+            for j in range(neighborhood):
+                if (i in channels) and (i+j+1 in channels):
+                    adjacency.append((i,i+j+1))
+        else:
+            for j in range(nr_of_electrodes_per_group - i):
+                if (i in channels) and (i+j+1 in channels):
+                    adjacency.append((i,i+j+1))
+
+    geometry = {}
+    for i in channels:
+        geometry[i] = (0, i*10)
+
+    with open(file_dir, 'a') as text:
+        print('channel_groups = {', file = text)
+        print("0: {:}'channels':".format('{') + str(channels), file=text)
+        print("'graph':"+str(adjacency), file = text)
+        print("'geometry: '"+str(geometry)+"}}", file = text)
 
     text.close()
 
