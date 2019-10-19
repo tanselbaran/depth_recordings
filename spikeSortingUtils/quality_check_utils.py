@@ -137,9 +137,9 @@ def calculate_unit_distances(session):
 	return euc, maho
 
 def ISI_violations(session, cutoff):
+	experiment = session.subExperiment.experiment
 	analysis_file = h5py.File(experiment.dir + 'analysis_results.hdf5', 'r+')
 	features, units, cluster_id = get_spike_features_and_unit_ids(session)
-	experiment = session.subExperiment.experiment
 	units = np.asarray(list(analysis_file[session.subExperiment.name + '/' + session.name + '/group_0'].keys()), dtype='int16')
 
 	ISI_violations = np.zeros(len(units))
