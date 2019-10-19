@@ -33,7 +33,7 @@ def create_prm_file(group,session):
     with open(file_dir, 'a') as text:
         print('experiment_name = \'group_{:g}\''.format(group), file = text)
         print('prb_file = \'group_{:g}.prb\''.format(group), file = text)
-        print('traces = dict(raw_data_files=[\'group_{:g}.dat\'], sample_rate ='.format(group) + str(experiment.sample_rate) + ', n_channels = ' + str(probe.nr_of_electrodes_per_group) + ', dtype = \'int16\')', file = text)
+        print('traces = dict(raw_data_files=[\'group_{:g}.dat\'], sample_rate ='.format(group) + str(experiment.sample_rate) + ', n_channels = ' + str(probe.nr_of_electrodes_per_group - len(session.dead_channels)) + ', dtype = \'int16\')', file = text)
 
         print("spikedetekt = { \n 'filter_low' : %d., \n 'filter_high_factor': 0.95 * .5, \n 'filter_butter_order': %i, \n #Data chunks. \n 'chunk_size_seconds': 1., \n 'chunk_overlap_seconds': .015, \n 'n_excerpts': 50, \n 'excerpt_size_seconds': 1., \n 'use_single_threshold': True, \n 'threshold_strong_std_factor': %d, \n 'threshold_weak_std_factor': 2., \n 'detect_spikes': 'negative', \n #Connected components. \n 'connected_component_join_size': 1, \n #Spike extractions. \n 'extract_s_before': %i, \n 'extract_s_after': %i, \n 'weight_power': 2, \n #Features. \n 'n_features_per_channel': 3, \n 'pca_n_waveforms_max':10000}" % (experiment.low_cutoff_bandpass, experiment.bandfilter_order, experiment.threshold_coeff, experiment.spike_samples_before, experiment.spike_samples_after) , file = text)
 
@@ -41,35 +41,38 @@ def create_prm_file(group,session):
 
     text.close()
 
-def create_linear_prb_file(group, session, neighboorhood=3):
+def create_linear_prb_file(group, session, neighborhood=3):
     experiment = session.subExperiment.experiment
     probe = experiment.probe
     file_dir = experiment.dir + '/analysis_files/' + session.subExperiment.name + '/' + session.name + '/spike_sorting/group_{:g}/group_{:g}.prb'.format(group,group)
 
     channels = list(range(probe.nr_of_electrodes_per_group))
-    for channel in session.dead_channels:
-        channels.remove(channel)
+    if session.dead_channels != ['']:
+        for channel in session.dead_channels:
+            channels.remove(channel)
+
+    ch_indices = np.arange(len(channels))
 
     adjacency = []
-    for i in channels:
-        if (i + neighborhood) < probe.nr_of_electrodes_per_group:
+    for i, ch in enumerate(channels):
+        if (ch + neighborhood) < probe.nr_of_electrodes_per_group:
             for j in range(neighborhood):
-                if (i in channels) and (i+j+1 in channels):
-                    adjacency.append((i,i+j+1))
+                if (ch in channels) and (ch+j+1 in channels):
+                    adjacency.append((ch_indices[i],channels.index(ch+j+1)))
         else:
-            for j in range(nr_of_electrodes_per_group - i):
-                if (i in channels) and (i+j+1 in channels):
-                    adjacency.append((i,i+j+1))
+            for j in range(probe.nr_of_electrodes_per_group - i):
+                if (ch in channels) and (ch+j+1 in channels):
+                    adjacency.append((ch_indices[i],channels.index(ch+j+1)))
 
     geometry = {}
-    for i in channels:
+    for i in ch_indices:
         geometry[i] = (0, i*10)
 
     with open(file_dir, 'a') as text:
         print('channel_groups = {', file = text)
-        print("0: {:}'channels':".format('{') + str(channels), file=text)
-        print("'graph':"+str(adjacency), file = text)
-        print("'geometry: '"+str(geometry)+"}}", file = text)
+        print("0: {:}'channels':".format('{') + str(list(range(len(channels))))+',', file=text)
+        print("'graph':"+str(adjacency)+',', file = text)
+        print("'geometry': "+str(geometry)+"}}", file = text)
 
     text.close()
 
