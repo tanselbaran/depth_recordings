@@ -13,6 +13,7 @@ import os
 import pickle
 from scipy import signal
 import h5py
+from copy import deepcopy
 
 def read_amplifier_dat_file(filepath):
     """
@@ -114,21 +115,25 @@ def read_group_into_dat_file(session, group, spike_sorting_analysis_files_dir):
     #Writing the data into the .dat file if spike sorting will be performed.
     #if session.subExperiment.preferences['do_spike_analysis'] == 'y':
     experiment = session.subExperiment.experiment
-    probe_id = experiment.probe.id
-    channels = probe_id[group]
+    probe_id = deepcopy(experiment.probe.id)
 
-    for dead_channel in sorted(session.dead_channels, reverse=True):
-        del channels[dead_channel]
+    channels = probe_id[group]
+    if session.dead_channels != ['']:
+        for dead_channel in sorted(session.dead_channels, reverse=True):
+            channels.remove(dead_channel)
 
     time = read_time_dat_file(session.dir + '/time.dat', experiment.sample_rate)
-    reference = np.zeros((len(session.ref_channels), len(time)))
-    for i, ref_channel in enumerate(session.ref_channels):
-        ch_idx = return_ch_idx(ref_channel)
-        reference[i] = read_amplifier_dat_file(session.dir + '/amp-A-{:}.dat'.format(ch_idx))
-    mean_reference = np.mean(reference, 0)
+    if session.ref_channels != ['']:
+        reference = np.zeros((len(session.ref_channels), len(time)))
+        for i, ref_channel in enumerate(session.ref_channels):
+            ch_idx = return_ch_idx(ref_channel)
+            reference[i] = read_amplifier_dat_file(session.dir + '/amp-A-{:}.dat'.format(ch_idx))
+        mean_reference = np.mean(reference, 0)
+    else:
+        mean_reference = np.zeros(len(time))
 
     data_all = np.memmap(spike_sorting_analysis_files_dir + '/group_{:g}/group_{:g}_temp.dat'.format(group,group),dtype='int16', mode='w+', shape=(len(channels),len(time)))
-    for i,ch in enumerate(channels):
+    for i, ch in enumerate(channels):
         ch_idx = return_ch_idx(ch)
         raw_data = read_amplifier_dat_file(session.dir + '/amp-A-{:}.dat'.format(ch_idx))
         refd_data = raw_data - mean_reference

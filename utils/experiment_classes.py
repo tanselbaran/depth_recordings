@@ -59,11 +59,15 @@ class Session:
         print(self.name)
         preferences['do_whisker_stim_evoked'] = self.get_input_for_pref("Do whisker stimulation evoked analysis for this session? (y/n)")
         ref_channels = input("Which channels will be used for software referencing to detect spikes?")
-        ref_channels = np.asarray(ref_channels.split(','))
+        self.ref_channels = ref_channels.split(',')
         dead_channels = input("Which channels are dead?")
-        dead_channels = np.asarray(dead_channels.split(','))
-        self.ref_channels = ref_channels.astype('int8')
-        self.dead_channels = dead_channels.astype('int8')
+        self.dead_channels = dead_channels.split(',')
+        if self.ref_channels != ['']:
+            self.ref_channels = np.asarray(self.ref_channels)
+            self.ref_channels = self.ref_channels.astype('int8')
+        if self.dead_channels != ['']:
+            self.dead_channels = np.asarray(self.dead_channels)
+            self.dead_channels = self.dead_channels.astype('int8')
         self.preferences = preferences
 
     def set_amplifier(self):
