@@ -95,6 +95,11 @@ class Session:
         self.probe.get_channel_mapping(amplifier)
         self.probe.get_channel_coords()
 
+    def get_duration(self):
+        time_file_dir = session.dir + '/time.dat'
+        session_time = read_time_dat_file(time_file_dir, self.subExperiment.experiment.sample_rate)
+        self.duration = session_time[-1]
+
 class subExperiment:
     def __init__(self, subExperiment_dir, experiment):
         self.dir = subExperiment_dir
@@ -107,6 +112,7 @@ class subExperiment:
         self.sessions[index_session] = Session(session_name, self)
         self.sessions[index_session].set_analysis_preferences()
         self.sessions[index_session].order = order
+        self.get_duration()
 
     def add_sessions_in_dir(self):
         subdirs = sorted(glob(self.dir + "/*[!analysis]"))
