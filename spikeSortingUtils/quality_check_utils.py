@@ -10,78 +10,147 @@ import numpy as np
 from matplotlib.pyplot import *
 import math
 from scipy.spatial.distance import mahalanobis
+from scipy.stats import chi2
 
+def get_spike_features_and_unit_ids(session):
+	"""
+	This function extracts the coordinates of each spike in the session from the kwx file in the feature space determined by the dimensionality reduction done by Klusta (N_electrodes x 3 features).
 
-def cluster_waveform_stdevs(clusters, waveforms, params):
-	cluster_inds = calculate_cluster_inds(clusters)
-	cluster_waveforms = obtain_unit_waveforms(clusters, waveforms)
-	cluster_stdevs = np.zeros(len(cluster_inds))
-	for cluster in range(len(cluster_inds)):
-		cluster_stdev = np.std(cluster_waveforms[cluster], 0)
-		cluster_stdevs[cluster] = np.mean(cluster_stdev)
-	return cluster_stdevs
+	Inputs:
+	 	session: Session object to be analyzed
 
-def calculate_distances_from_origin(clusters):
-	centers = clusters.cluster_centers_
-	centers_sq = np.square(centers)
-	centers_sum = np.sum(centers_sq, 1)
-	centers_sqrt = np.sqrt(centers_sum)
-	return(centers_sqrt)
+	Outputs:
+		features: N_spikes x (N_electrodes x 3) numpy array containing the coordinates of each spike in the feature space.
+	"""
+	experiment = session.subExperiment.experiment
+    spike_sorting_folder = experiment.dir + '/analysis_files/' + session.subExperiment.name + '/' + session.name + '/spike_sorting/group_0/'
 
-def calculate_mahalanobis_distances(clusters, projection, params):
-	cluster_inds = calculate_cluster_inds(clusters)
-	centers = clusters.cluster_centers_
-	num_clusters = len(cluster_inds)
-	num_channels = len(params['channels'])
-	mah_dists = np.zeros((num_clusters, num_clusters))
+    kwx_file = h5py.File(spike_sorting_folder + 'group_0.kwx', 'r')
+	kwik_file = h5py.File(spike_sorting_folder + 'group_0.kwik', 'r')
+	analysis_file = h5py.File(experiment.dir + 'analysis_results.hdf5', 'r')
 
-	for cluster in range(num_clusters):
-		cluster_points =projection[cluster_inds[cluster]]
-		cluster_points = np.transpose(cluster_points)
-		cov_cluster = np.cov(cluster_points)
-		center0 = np.reshape(centers[cluster], (projection.shape[1], num_channels))
-		for cluster1 in range(num_clusters):
-			center1 = np.reshape(centers[cluster1], (projection.shape[1], num_channels))
-			a = np.matmul(np.linalg.inv(cov_cluster), (center1-center0))
-			dist_sq = np.matmul(np.transpose(center1-center0), a)
-			dist = math.sqrt(dist_sq)
-			mah_dists[cluster, cluster1] = dist
+	cluster_id = np.asarray(kwik_file['channel_groups/0/spikes/clusters/main'])
+	units = np.asarray(list(analysis_file[session.subExperiment.name + '/' + session.name + '/group_0'].keys()), dtype='int16')
 
-	return mah_dists
+	features_masks = np.asarray(kwx_file['channel_groups/0/features_masks'])
+	features = features_masks[:,:,0]
 
-def calculate_unit_distances_from_origin(unit_indices, projection):
-    centers = np.mean(projection[unit_indices], 0)
-    centers_sq = np.square(centers)
-    centers_sum = np.sum(centers_sq, 1)
-    centers_sqrt = np.sqrt(centers_sum)
-    return(centers_sqrt)
+	kwx_file.close()
+	kwik_file.close()
+	analysis_file.close()
 
-def calculate_mahalanobis_distances_for_units(unit_indices, projection, num_channels):
-    centers = np.zeros((projection.shape))
-    mah_dists = np.zeros((len(unit_indices), len(unit_indices)))
+	return features, units, cluster_id
 
-    for unit in range(len(unit_indices)):
-        centers[unit] = np.mean(projection[unit_indices[unit]], 0)
-    for unit in range(len(unit_indices)):
-        cluster_points = projection[unit_indices[unit]]
-        cluster_points = np.transpose(cluster_points)
-        cov_cluster = np.cov(cluster_points)
-        center0 = np.asarray(centers[unit])
-        for unit1 in range(len(unit_indices)):
-            center1 = np.asarray(centers[unit1])
-            mah_dists[unit, unit1] = mahalanobis(center1, center0, cov_cluster)
-    return mah_dists
+def get_spike_mahalanobis_distances(session):
+	"""
+	This function calculates the Mahalanobis distance of each spike from each of the unit cluster center of masses in the feature space (based on the dimensionality reduction done by Klusta)
 
+	Inputs:
 
-def ISI(spike_times, sample_rate):
-	ISI = {}
-	for i in range(len(spike_times)):
-		ISI[i] = (np.diff(spike_times[i]) / sample_rate) * 1000
-	return ISI
+	"""
+	features, units, cluster_id = get_spike_features_and_unit_ids(session)
+	spk_mah_dists = np.zeros((len(cluster_id), len(units)))
 
-def ISI_violations(ISI, cutoff):
-	ISI_violations = np.zeros(len(ISI))
-	for i in range(len(ISI)):
-		ISI_violation_instances = ISI[i][(np.where(ISI[i] < cutoff))]
-		ISI_violations[i] = len(ISI_violation_instances) / len(ISI[i])
+	for i, unit in enumerate(units):
+		unit_spikes = np.where(cluster_id == unit)[0]
+		unit_spike_coords = fe.atures[unit_spikes]
+		unit_center_of_mass = np.mean(unit_spike_coords, 0)
+		unit_inv_cov = np.linalg.inv(np.cov(unit_spike_coords, rowvar=False))
+		for spike in range(len(cluster_id)):
+			spk_mah_dists[spike,i] = mahalanobis(features[spike], unit_center_of_mass, unit_inv_cov)
+
+	analysis_file.close()
+
+	return spk_mah_dists
+
+def L_ratio(session):
+	analysis_file = h5py.File(experiment.dir + 'analysis_results.hdf5', 'r+')
+	features, units, cluster_id = get_spike_features_and_unit_ids(session)
+	spk_mah_dists = get_spike_mahalanobis_distances(session)
+
+	L_ratios = np.zeros(len(units))
+
+	for i,unit in enumerate(units):
+		unit_spikes = np.where(cluster_id == unit)[0]
+		non_unit_spikes = np.where(cluster_id != unit)[0]
+		cdf = chi2.cdf(np.square(spk_mah_dists[noise_spikes, i]), len(features[0]))
+		L_ratio = np.sum(1-cdf)/len(unit_spikes)
+		L_ratios[i] = L_ratio
+
+		unit_grp = analysis_file[session.subExperiment.name + '/' + session.name + '/group_0/' + str(unit)]
+		unit_grp.create_dataset("L_ratio", data=L_ratios[i])
+
+	return L_ratios
+
+def isolation_distance(session):
+	"""
+	Isolation distance between each unit from "noise" is calculated as defined in Harris et al 2001, Neuron paper.
+
+	Inputs:
+		session: Session object for the recording session to be analyzed
+
+	Outputs:
+		isolation_distances: N_units x 1 numpy array containing the Isolation Distance of each unit cluster identified in the recording session from spike sorting
+	"""
+	analysis_file = h5py.File(experiment.dir + 'analysis_results.hdf5', 'r+')
+	features, units, cluster_id = get_spike_features_and_unit_ids(session)
+	spk_mah_dists = get_spike_mahalanobis_distances(session)
+
+	isolation_distances = np.zeros(len(units))
+	for i,unit in enumerate(units):
+		unit_spikes = np.where(cluster_id == unit)[0]
+		non_unit_spikes = np.where(cluster_id != unit)[0]
+		spike_count = len(unit_spikes)
+		isolation_distances[i] = np.square(np.sort(spk_mah_dists[non_unit_spikes, i])[spike_count])
+
+		unit_grp = analysis_file[session.subExperiment.name + '/' + session.name + '/group_0/' + str(unit)]
+		unit_grp.create_dataset("isolation_distance", data=isolation_distances[i])
+
+	return isolation_distances
+
+def calculate_unit_distances(session):
+	analysis_file = h5py.File(experiment.dir + 'analysis_results.hdf5', 'r+')
+	features, units, cluster_id = get_spike_features_and_unit_ids(session)
+	unit_cms = np.zeros((len(units), len(features[0])))
+	euc = np.zeros((len(units), len(units)))
+	maho = np.zeros((len(units), len(units)))
+
+	inv_cov = np.linalg.inv(np.cov(features, rowvar=False))
+
+	for i, unit in enumerate(units):
+		unit_spikes = np.where(cluster_id == unit)[0]
+		unit_spike_coords = features[unit_spikes]
+		unit_cms[i] = np.mean(unit_spike_coords, 0)
+
+	for i in range(len(units)):
+		for j in range(len(units)):
+			if j==i:
+				euc[i,j] = np.linalg.norm(unit_cms[i] - np.zeros(len(features[0])))
+				maho[i,j] = mahalanobis(unit_cms[i], np.zeros(len(features[0])), inv_cov)
+			else:
+				euc[i,j] = np.linalg.norm(unit_cms[i] - unit_cms[j])
+				maho[i,j] = mahalanobis(unit_cms[i], unit_cms[j], inv_cov)
+
+	group_grp = analysis_file[session.subExperiment.name + '/' + session.name + '/group_0/']
+	group_grp.create_dataset("euclidian", data=euc)
+	group_grp.create_dataset("mahalanobis", data=maho)
+	return euc, maho
+
+def ISI_violations(session, cutoff):
+	analysis_file = h5py.File(experiment.dir + 'analysis_results.hdf5', 'r+')
+	features, units, cluster_id = get_spike_features_and_unit_ids(session)
+	experiment = session.subExperiment.experiment
+	units = np.asarray(list(analysis_file[session.subExperiment.name + '/' + session.name + '/group_0'].keys()), dtype='int16')
+
+	ISI_violations = np.zeros(len(units))
+
+	for i, unit in enumerate(units):
+		spike_times = np.asarray(analysis_file[session.subExperiment.name + '/' + session.name + '/group_0/' + str(unit)], dtype='int16')
+		ISI[i] = (np.diff(spike_times) / experiment.sample_rate) * 1000
+		ISI_violation_instances = ISI[np.where(ISI < cutoff)[0]]
+		ISI_violations[i] = len(ISI_violation_instances) / len(ISI)
+
+		unit_grp = analysis_file[session.subExperiment.name + '/' + session.name + '/group_0/' + str(unit)]
+		unit_grp.create_dataset("ISI_violations", data=ISI_violations[i])
+
 	return ISI_violations
