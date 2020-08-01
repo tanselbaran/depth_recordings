@@ -12,61 +12,20 @@ import h5py
 
 def generate_psths(location, group, spike_trains_location):
     experiment = location.experiment
-    f = h5py.File(experiment.dir + '/analysis_results.hdf5', 'a')
+    f = h5py.File(experiment.dir + '/preprocessing_results.hdf5', 'a')
 
     for session_index in location.sessions:
         session = location.sessions[session_index]
         ses_grp = f[location.name + '/' + session.name]
         ch_grp = ses_grp['group_{:g}'.format(group)]
 
-        analysis_prefs = location.sessions[session_index].preferences
-        if analysis_prefs['do_whisker_stim_evoked'] == 'y':
+        preprocessing_prefs = location.sessions[session_index].preferences
+        if preprocessing_prefs['do_whisker_stim_evoked'] == 'y':
             whisker_stim_timestamps = ses_grp["whisker_stim_timestamps"]
             whisker_bounds = [experiment.whisker_evoked_pre/1000, experiment.whisker_evoked_post/1000]
             whisker_evoked_trains, whisker_evoked_psths = get_psth(spike_trains_location[session_index], session, whisker_stim_timestamps, whisker_bounds)
             ch_grp.create_dataset("whisker_evoked_trains", data = whisker_evoked_trains)
             ch_grp.create_dataset("whisker_evoked_psths", data = whisker_evoked_psths)
-
-        if analysis_prefs['do_optical_stim_evoked'] == 'y':
-            optical_stim_timestamps = ses_grp["optical_stim_timestamps"]
-            optical_bounds = [experiment.optical_evoked_pre/1000, experiment.optical_evoked_post/1000]
-            optical_evoked_trains, optical_evoked_psths = get_psth(spike_trains_location[session_index], session, optical_stim_timestamps, optical_bounds)
-            ch_grp.create_dataset("optical_evoked_trains", data = optical_evoked_trains)
-            ch_grp.create_dataset("optical_evoked_psths", data = optical_evoked_psths)
-
-def break_down_to_sessions(location, spike_times, spike_trains):
-    end_inds = location.end_inds
-    spike_trains_location = {}
-    for session_index in location.sessions:
-        session = location.sessions[session_index]
-        spike_trains_session = spike_trains[:,int(end_inds[session_index]):int(end_inds[session_index+1])]
-        spike_trains_session = spike_trains_session.astype('int8')
-        spike_trains_location[session_index] = spike_trains_session
-
-    return spike_trains_location
-
-def firing_histogram(bin_size, spike_times, sample_rate, end_inds):
-    """
-    This function generates a histogram of the given spike trains with the given bin sizes.
-
-    Inputs:
-        bin_size: The bin size for the histogram (in s)
-        spike_times: Dictionary containing the time indicies of the spikes to be analyzed
-        sample_rate: Sampling rate of the data (in Hz)
-        end_inds:  The indices of the stim-spont or anesthesia level transitions in the recording trace (first entry and last entry must be 0 and the length of recording trace in samples respectively)
-
-    Outputs:
-        hist: Array containing the histogram of the spiking activity (Nx[total number of bins in the histogram])
-    """
-    bin_size_inds = sample_rate * bin_size #converting bin size from seconds to samples
-    hist = np.zeros((len(spike_times), int(end_inds[-1]/bin_size_inds)))
-    spike_train = np.zeros(int(end_inds[-1]))
-    for unit in range(len(hist)):
-        spike_train[spike_times[unit]] = 1
-        for bin in range(len(hist[0])):
-            hist[unit, bin] = np.sum(spike_train[int(bin*bin_size_inds):int(min(end_inds[-1]*sample_rate, (bin+1)*bin_size_inds))]) #the end boundary of the interval is set by checking if the next bin would exceed the last index of the recoring trace.
-
-    return hist
 
 def get_firing_rate(spike_times, end_inds, sample_rate):
     """
@@ -145,20 +104,4 @@ def plot_firing_histogram(hist, unit, bin_size, end_inds, sample_rate):
         axvline(end_inds[i+1]/sample_rate, color = 'r', linestyle = 'dashed')
     xlabel('Time (s)')
     ylabel('Firing rate (Hz)')
-    show()
-
-def plot_psth(unit, evoked_psth, psth_range):
-    figure()
-    plot(psth_range, np.mean(evoked_psth, 0))
-    axvline(0, color = 'r', linestyle = 'dashed')
-    xlabel('Time (ms)')
-    ylabel('Voltage (uV)')
-    show()
-
-def plot_spike_train(spike_trains, time, stim):
-    fig, axs = subplots(2,1, sharex = 'all', figsize = (10,10))
-    axs[0].plot(time, spike_trains[unit])
-    axs[0].set_xlabel('Time (s)')
-    axs[0].set_ylabel('Spike train')
-    axs[1].plot(time, stim)
     show()
