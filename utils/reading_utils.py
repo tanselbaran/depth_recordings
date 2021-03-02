@@ -52,10 +52,10 @@ def extract_stim_timestamps_der(stim, session):
 
     Inputs:
         stim: Array that contains the signal from the digital input channel for the stimulus ttl pulse
-        session: The session object for which the stimulus timestamps are extracted 
-        
-    Outputs: 
-        stim_timestamps: Stimulus timestamps (defined by the rising edge of the TTL pulse) in the units of samples (divided by the predefined downsampling factor) 
+        session: The session object for which the stimulus timestamps are extracted
+
+    Outputs:
+        stim_timestamps: Stimulus timestamps (defined by the rising edge of the TTL pulse) in the units of samples (divided by the predefined downsampling factor)
     """
 
     stim_diff = np.diff(stim)
@@ -70,13 +70,13 @@ def extract_stim_timestamps_der(stim, session):
 
 def read_stimulus_trigger(session):
     """
-    This function extracts the stimulus timestamps from the TTL signal file for a session and saves it as an array in the preprocessing hdf file. 
-    
+    This function extracts the stimulus timestamps from the TTL signal file for a session and saves it as an array in the preprocessing hdf file.
+
     Inputs:
         session: The session for which the stimulus information is to be retrieved.
-    
+
     Outputs:
-        stimulus timestamps are saved in the hdf file with the unit of samples divided by the predefined downsampling factor for the LFP analysis 
+        stimulus timestamps are saved in the hdf file with the unit of samples divided by the predefined downsampling factor for the LFP analysis
     """
     experiment = session.experiment
     f = h5py.File(experiment.dir + '/preprocessing_results.hdf5', 'a')
@@ -86,12 +86,12 @@ def read_stimulus_trigger(session):
         #Read data from the .dat file containing the TTL signal
         with open(whisker_trigger_filepath, 'rb') as fid:
             whisker_stim_trigger = np.fromfile(fid, np.int16)
-            
-        #Detect the timestamps from the TTL signal 
+
+        #Detect the timestamps from the TTL signal
         whisker_stim_timestamps = (extract_stim_timestamps_der(whisker_stim_trigger,session) / session.downsampling_factor)
         whisker_stim_timestamps = whisker_stim_timestamps.astype('int')
-        
-        #Save the stim timestamps in the hdf file 
+
+        #Save the stim timestamps in the hdf file
         f[session.name].create_dataset("whisker_stim_timestamps", data = whisker_stim_timestamps)
 
 def read_channel(session, group, trode, chunk_inds):
@@ -153,25 +153,25 @@ def read_channel(session, group, trode, chunk_inds):
 def read_group_into_dat_file(session, group, spike_sorting_preprocessing_files_dir):
     #Writing the data into the .dat file if spike sorting will be performed.
     time = read_time_dat_file(session.dir + '/time.dat', session.sample_rate)
-    if (session.preferences['ref_channels'] != ['']):
-        reference = np.zeros((len(session.preferences['ref_channels']), len(time)))
-        for i, ref_channel in enumerate(session.preferences['ref_channels']):
+    if (session.ref_channels != ['']):
+        reference = np.zeros((len(session.ref_channels), len(time)))
+        for i, ref_channel in enumerate(session.ref_channels):
             reference[i] = read_channel(session, group, ref_channel, [0,-1])
         mean_reference = np.mean(reference, 0)
     else:
         mean_reference = np.zeros(len(time))
 
     data_all = np.memmap(spike_sorting_preprocessing_files_dir + '/group_{:g}/group_{:g}_temp.dat'.format(group,group),dtype='int16', mode='w+', shape=(len(session.good_channels),len(time)))
-    
-    if np.array_equal(session.good_channels, session.preferences['ref_channels']):
+
+    if np.array_equal(session.good_channels, session.ref_channels):
         data_all = reference - mean_reference
-    
+
     else:
         for i, ch in enumerate(session.good_channels):
             raw_data = read_channel(session, group, ch, [0,-1])
             refd_data = raw_data - mean_reference
             data_all[i] = refd_data
-            
+
     data_all = data_all.flatten('F')
     data_all.tofile(open(spike_sorting_preprocessing_files_dir + '/group_{:g}/group_{:g}.dat'.format(group, group), 'wb'))
 

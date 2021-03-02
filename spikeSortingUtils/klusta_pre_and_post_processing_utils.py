@@ -30,7 +30,7 @@ def create_prm_file(group,session):
     with open(file_dir, 'a') as text:
         print('experiment_name = \'group_{:g}\''.format(group), file = text)
         print('prb_file = \'group_{:g}.prb\''.format(group), file = text)
-        print('traces = dict(raw_data_files=[\'group_{:g}.dat\'], sample_rate ='.format(group) + str(session.sample_rate) + ', n_channels = ' + str(probe.nr_of_electrodes_per_group - len(session.preferences['dead_channels'])) + ', dtype = \'int16\')', file = text)
+        print('traces = dict(raw_data_files=[\'group_{:g}.dat\'], sample_rate ='.format(group) + str(session.sample_rate) + ', n_channels = ' + str(probe.nr_of_electrodes_per_group - len(session.dead_channels)) + ', dtype = \'int16\')', file = text)
 
         print("spikedetekt = { \n 'filter_low' : %d., \n 'filter_high_factor': 0.95 * .5, \n 'filter_butter_order': %i, \n #Data chunks. \n 'chunk_size_seconds': 1., \n 'chunk_overlap_seconds': .015, \n 'n_excerpts': 50, \n 'excerpt_size_seconds': 1., \n 'use_single_threshold': True, \n 'threshold_strong_std_factor': %d, \n 'threshold_weak_std_factor': 2., \n 'detect_spikes': 'negative', \n #Connected components. \n 'connected_component_join_size': 1, \n #Spike extractions. \n 'extract_s_before': %i, \n 'extract_s_after': %i, \n 'weight_power': 2, \n #Features. \n 'n_features_per_channel': 3, \n 'pca_n_waveforms_max':10000}" % (experiment.low_cutoff_bandpass, experiment.bandfilter_order, experiment.threshold_coeff, session.spike_samples_before, session.spike_samples_after) , file = text)
 
@@ -44,8 +44,8 @@ def create_linear_prb_file(group, session, neighborhood=3):
     file_dir = experiment.dir + '/preprocessing_files/' + session.name + '/spike_sorting/group_{:g}/group_{:g}.prb'.format(group,group)
 
     channels = list(range(probe.nr_of_electrodes_per_group))
-    if session.preferences['dead_channels'] != ['']:
-        for channel in session.preferences['dead_channels']:
+    if session.dead_channels != ['']:
+        for channel in session.dead_channels:
             channels.remove(channel)
 
     ch_indices = np.arange(len(channels))
@@ -115,7 +115,7 @@ def get_all_spike_info(units, session, preprocessing_file_dir):
 
     data = np.memmap(preprocessing_file_dir + '/group_{:g}/group_{:g}_temp.dat'.format(group,group),dtype='int16', mode='w+', shape=(len(channels),len(time)))
     for i, ch in enumerate(channels):
-        if ch not in session.preferences['dead_channels']:
+        if ch not in session.dead_channels:
             ch_idx = return_ch_idx(ch)
             raw_data = read_amplifier_dat_file(session.dir + '/amp-A-{:}.dat'.format(ch_idx))
             data[i] = signal.filtfilt(b,a,raw_data)
